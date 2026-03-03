@@ -1,0 +1,614 @@
+---
+title: Signals
+description: Built-in signals for decoupled notifications across Django components
+---
+
+## Overview
+
+Django includes a signal dispatcher that allows decoupled applications to get notified when actions occur elsewhere in the framework. Signals allow certain senders to notify a set of receivers when some action has taken place.
+
+## Model Signals
+
+Signals sent by the model system when models are saved, deleted, or modified.
+
+### pre_save
+
+Sent before a model's `save()` method is called.
+
+```python
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+
+@receiver(pre_save, sender=MyModel)
+def my_handler(sender, instance, raw, using, update_fields, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class that sent the signal
+</ParamField>
+
+<ParamField path="instance" type="Model instance">
+  The actual instance being saved
+</ParamField>
+
+<ParamField path="raw" type="bool">
+  `True` if the model is saved exactly as presented (e.g., when loading fixtures)
+</ParamField>
+
+<ParamField path="using" type="str">
+  The database alias being used
+</ParamField>
+
+<ParamField path="update_fields" type="list | None">
+  The set of fields to update, or `None` if `save()` updates all fields
+</ParamField>
+
+**Usage:**
+```python
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+from myapp.models import Article
+
+@receiver(pre_save, sender=Article)
+def article_pre_save(sender, instance, **kwargs):
+    # Update slug before saving
+    if not instance.slug:
+        instance.slug = slugify(instance.title)
+```
+
+### post_save
+
+Sent after a model's `save()` method is called.
+
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=MyModel)
+def my_handler(sender, instance, created, raw, using, update_fields, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class that sent the signal
+</ParamField>
+
+<ParamField path="instance" type="Model instance">
+  The actual instance that was saved
+</ParamField>
+
+<ParamField path="created" type="bool">
+  `True` if a new record was created, `False` if an existing record was updated
+</ParamField>
+
+<ParamField path="raw" type="bool">
+  `True` if the model is saved exactly as presented
+</ParamField>
+
+<ParamField path="using" type="str">
+  The database alias being used
+</ParamField>
+
+<ParamField path="update_fields" type="list | None">
+  The set of fields that were updated, or `None`
+</ParamField>
+
+**Usage:**
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth.models import User
+from myapp.models import Profile
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    instance.profile.save()
+```
+
+### pre_delete
+
+Sent before a model's `delete()` method is called.
+
+```python
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
+
+@receiver(pre_delete, sender=MyModel)
+def my_handler(sender, instance, using, origin, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class that sent the signal
+</ParamField>
+
+<ParamField path="instance" type="Model instance">
+  The actual instance being deleted
+</ParamField>
+
+<ParamField path="using" type="str">
+  The database alias being used
+</ParamField>
+
+<ParamField path="origin" type="Model instance | None">
+  The instance that triggered the deletion (for cascade deletes)
+</ParamField>
+
+**Usage:**
+```python
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
+from myapp.models import Document
+
+@receiver(pre_delete, sender=Document)
+def delete_document_file(sender, instance, **kwargs):
+    # Delete file from storage before deleting database record
+    if instance.file:
+        instance.file.delete(save=False)
+```
+
+### post_delete
+
+Sent after a model's `delete()` method is called.
+
+```python
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+@receiver(post_delete, sender=MyModel)
+def my_handler(sender, instance, using, origin, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class that sent the signal
+</ParamField>
+
+<ParamField path="instance" type="Model instance">
+  The instance that was deleted (no longer in database)
+</ParamField>
+
+<ParamField path="using" type="str">
+  The database alias being used
+</ParamField>
+
+<ParamField path="origin" type="Model instance | None">
+  The instance that triggered the deletion
+</ParamField>
+
+**Usage:**
+```python
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+from myapp.models import Article
+
+@receiver(post_delete, sender=Article)
+def clear_article_cache(sender, instance, **kwargs):
+    cache.delete(f'article_{instance.id}')
+```
+
+### pre_init
+
+Sent before a model's `__init__()` method is called.
+
+```python
+from django.db.models.signals import pre_init
+from django.dispatch import receiver
+
+@receiver(pre_init, sender=MyModel)
+def my_handler(sender, args, kwargs, **signal_kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class that sent the signal
+</ParamField>
+
+<ParamField path="args" type="list">
+  Positional arguments passed to `__init__()`
+</ParamField>
+
+<ParamField path="kwargs" type="dict">
+  Keyword arguments passed to `__init__()`
+</ParamField>
+
+### post_init
+
+Sent after a model's `__init__()` method is called.
+
+```python
+from django.db.models.signals import post_init
+from django.dispatch import receiver
+
+@receiver(post_init, sender=MyModel)
+def my_handler(sender, instance, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class
+</ParamField>
+
+<ParamField path="instance" type="Model instance">
+  The instance that was initialized
+</ParamField>
+
+### m2m_changed
+
+Sent when a ManyToManyField is changed.
+
+```python
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
+
+@receiver(m2m_changed, sender=MyModel.my_field.through)
+def my_handler(sender, instance, action, reverse, model, pk_set, using, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The intermediate model class for the M2M field
+</ParamField>
+
+<ParamField path="instance" type="Model instance">
+  The instance whose M2M relation is updated
+</ParamField>
+
+<ParamField path="action" type="str">
+  The type of update: 'pre_add', 'post_add', 'pre_remove', 'post_remove', 'pre_clear', or 'post_clear'
+</ParamField>
+
+<ParamField path="reverse" type="bool">
+  `True` if the update is on the reverse side of the relation
+</ParamField>
+
+<ParamField path="model" type="Model class">
+  The class of objects added/removed/cleared
+</ParamField>
+
+<ParamField path="pk_set" type="set | None">
+  Set of primary keys of objects added/removed (None for clear)
+</ParamField>
+
+<ParamField path="using" type="str">
+  The database alias being used
+</ParamField>
+
+**Usage:**
+```python
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
+from myapp.models import Article
+
+@receiver(m2m_changed, sender=Article.tags.through)
+def article_tags_changed(sender, instance, action, **kwargs):
+    if action in ['post_add', 'post_remove', 'post_clear']:
+        # Update article's tag cache
+        cache.delete(f'article_tags_{instance.id}')
+```
+
+## Request/Response Signals
+
+### request_started
+
+Sent when Django begins processing an HTTP request.
+
+```python
+from django.core.signals import request_started
+from django.dispatch import receiver
+
+@receiver(request_started)
+def my_handler(sender, environ, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="class">
+  The handler class (e.g., `django.core.handlers.wsgi.WsgiHandler`)
+</ParamField>
+
+<ParamField path="environ" type="dict">
+  The WSGI environ dictionary
+</ParamField>
+
+**Usage:**
+```python
+from django.core.signals import request_started
+from django.dispatch import receiver
+import logging
+
+logger = logging.getLogger(__name__)
+
+@receiver(request_started)
+def log_request_started(sender, environ, **kwargs):
+    logger.info(f"Request started: {environ.get('PATH_INFO')}")
+```
+
+### request_finished
+
+Sent when Django finishes processing an HTTP request.
+
+```python
+from django.core.signals import request_finished
+from django.dispatch import receiver
+
+@receiver(request_finished)
+def my_handler(sender, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="class">
+  The handler class
+</ParamField>
+
+**Usage:**
+```python
+from django.core.signals import request_finished
+from django.dispatch import receiver
+
+@receiver(request_finished)
+def close_connections(sender, **kwargs):
+    # Cleanup code after request
+    pass
+```
+
+### got_request_exception
+
+Sent when Django encounters an exception while processing a request.
+
+```python
+from django.core.signals import got_request_exception
+from django.dispatch import receiver
+
+@receiver(got_request_exception)
+def my_handler(sender, request, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="class">
+  The handler class
+</ParamField>
+
+<ParamField path="request" type="HttpRequest">
+  The request object
+</ParamField>
+
+**Usage:**
+```python
+from django.core.signals import got_request_exception
+from django.dispatch import receiver
+import logging
+
+logger = logging.getLogger(__name__)
+
+@receiver(got_request_exception)
+def log_exception(sender, request, **kwargs):
+    logger.error(f"Exception on {request.path}", exc_info=True)
+```
+
+## Migration Signals
+
+### pre_migrate
+
+Sent before migrations are applied.
+
+```python
+from django.db.models.signals import pre_migrate
+from django.dispatch import receiver
+
+@receiver(pre_migrate)
+def my_handler(sender, app_config, verbosity, interactive, using, plan, apps, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="AppConfig">
+  The app config for the app about to be migrated
+</ParamField>
+
+<ParamField path="app_config" type="AppConfig">
+  Same as sender
+</ParamField>
+
+<ParamField path="verbosity" type="int">
+  Verbosity level
+</ParamField>
+
+<ParamField path="interactive" type="bool">
+  Whether migrations are running interactively
+</ParamField>
+
+<ParamField path="using" type="str">
+  Database alias
+</ParamField>
+
+<ParamField path="plan" type="list">
+  List of migration operations to be performed
+</ParamField>
+
+<ParamField path="apps" type="Apps">
+  Registry of installed applications
+</ParamField>
+
+### post_migrate
+
+Sent after migrations are applied.
+
+```python
+from django.db.models.signals import post_migrate
+from django.dispatch import receiver
+
+@receiver(post_migrate)
+def my_handler(sender, app_config, verbosity, interactive, using, plan, apps, **kwargs):
+    pass
+```
+
+Parameters are the same as `pre_migrate`.
+
+**Usage:**
+```python
+from django.db.models.signals import post_migrate
+from django.dispatch import receiver
+
+@receiver(post_migrate)
+def create_default_data(sender, **kwargs):
+    from myapp.models import Category
+    if not Category.objects.exists():
+        Category.objects.create(name='Default')
+```
+
+## Other Signals
+
+### setting_changed
+
+Sent when settings are changed using `override_settings` in tests.
+
+```python
+from django.core.signals import setting_changed
+from django.dispatch import receiver
+
+@receiver(setting_changed)
+def my_handler(sender, setting, value, enter, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="class">
+  The settings module
+</ParamField>
+
+<ParamField path="setting" type="str">
+  Name of the setting that changed
+</ParamField>
+
+<ParamField path="value" type="any">
+  New value of the setting
+</ParamField>
+
+<ParamField path="enter" type="bool">
+  `True` when entering override, `False` when exiting
+</ParamField>
+
+### class_prepared
+
+Sent when a model class is prepared (fully loaded).
+
+```python
+from django.db.models.signals import class_prepared
+from django.dispatch import receiver
+
+@receiver(class_prepared)
+def my_handler(sender, **kwargs):
+    pass
+```
+
+<ParamField path="sender" type="Model class">
+  The model class that was prepared
+</ParamField>
+
+## Connecting Signal Handlers
+
+### Using Decorators
+
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from myapp.models import MyModel
+
+@receiver(post_save, sender=MyModel)
+def my_handler(sender, instance, created, **kwargs):
+    if created:
+        print(f"New {sender.__name__} created: {instance}")
+```
+
+### Manual Connection
+
+```python
+from django.db.models.signals import post_save
+from myapp.models import MyModel
+
+def my_handler(sender, instance, created, **kwargs):
+    if created:
+        print(f"New {sender.__name__} created: {instance}")
+
+post_save.connect(my_handler, sender=MyModel)
+```
+
+### Lazy Sender Connection
+
+Connect to a model specified as a string:
+
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender='myapp.MyModel')
+def my_handler(sender, instance, **kwargs):
+    pass
+```
+
+### Disconnecting Handlers
+
+```python
+from django.db.models.signals import post_save
+
+post_save.disconnect(my_handler, sender=MyModel)
+```
+
+## Best Practices
+
+### Avoid Circular Imports
+
+Define signal handlers in a `signals.py` file and import in `apps.py`:
+
+```python
+# myapp/signals.py
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import MyModel
+
+@receiver(post_save, sender=MyModel)
+def my_handler(sender, instance, **kwargs):
+    pass
+```
+
+```python
+# myapp/apps.py
+from django.apps import AppConfig
+
+class MyAppConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'myapp'
+    
+    def ready(self):
+        import myapp.signals  # noqa
+```
+
+### Prevent Infinite Loops
+
+```python
+@receiver(post_save, sender=Article)
+def update_related(sender, instance, **kwargs):
+    # Prevent infinite loop by not calling save()
+    # Use update() instead
+    Article.objects.filter(id=instance.id).update(view_count=F('view_count') + 1)
+```
+
+### Use dispatch_uid
+
+Prevent duplicate signal connections:
+
+```python
+@receiver(post_save, sender=MyModel, dispatch_uid="mymodel_post_save")
+def my_handler(sender, instance, **kwargs):
+    pass
+```
+
+## See Also
+
+- [Custom Signals](/guides/signals#custom-signals) - Creating your own signals
+- [Signal Reference](/api/signals/reference) - Complete signal reference
+- [Model Lifecycle](/guides/models/lifecycle) - Understanding model signals in context

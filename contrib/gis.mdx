@@ -1,0 +1,551 @@
+---
+title: GeoDjango (GIS)
+description: Geographic database features for location-based applications
+---
+
+GeoDjango is a module included with Django that provides geographic database capabilities. It supports PostGIS, MySQL, Oracle Spatial, and SpatiaLite.
+
+## Installation
+
+### System Requirements
+
+Install geospatial libraries:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install binutils libproj-dev gdal-bin python3-gdal
+
+# macOS with Homebrew
+brew install postgresql postgis gdal libgeoip
+
+# Install Python packages
+pip install psycopg2-binary
+```
+
+### Django Configuration
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.gis',
+    # Other apps
+]
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': 'geodjango_db',
+        'USER': 'postgres',
+        'PASSWORD': 'password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+```
+
+### PostgreSQL Setup
+
+```sql
+-- Create database
+CREATE DATABASE geodjango_db;
+
+-- Connect to database
+\c geodjango_db;
+
+-- Enable PostGIS extension
+CREATE EXTENSION postgis;
+```
+
+## Geographic Model Fields
+
+Fields are defined in `django.contrib.gis.db.models.fields`:
+
+```python models.py
+from django.contrib.gis.db import models
+from django.contrib.gis.geos import Point
+
+class Location(models.Model):
+    name = models.CharField(max_length=200)
+    
+    # Point field (latitude/longitude)
+    point = models.PointField()
+    
+    # Polygon field (boundaries)
+    area = models.PolygonField(null=True, blank=True)
+    
+    # Line field (routes)
+    path = models.LineStringField(null=True, blank=True)
+    
+    # Multi-geometry fields
+    multi_point = models.MultiPointField(null=True, blank=True)
+    multi_polygon = models.MultiPolygonField(null=True, blank=True)
+    multi_line = models.MultiLineStringField(null=True, blank=True)
+    
+    def __str__(self):
+        return self.name
+```
+
+### Field Options
+
+```python models.py
+from django.contrib.gis.db import models
+
+class Place(models.Model):
+    name = models.CharField(max_length=100)
+    
+    location = models.PointField(
+        srid=4326,          # Spatial Reference System (WGS84 default)
+        spatial_index=True,  # Create spatial index (default True)
+        geography=False,     # Use geography type instead of geometry
+    )
+```
+
+## GEOS Geometry Objects
+
+From `django.contrib.gis.geos`:
+
+```python
+from django.contrib.gis.geos import Point, Polygon, LineString
+
+# Create a point (longitude, latitude)
+point = Point(-122.4194, 37.7749)  # San Francisco
+print(point.x, point.y)  # -122.4194, 37.7749
+
+# Create from WKT (Well-Known Text)
+point = Point.from_ewkt('POINT(-122.4194 37.7749)')
+
+# Create a line
+line = LineString(
+    (-122.4194, 37.7749),  # San Francisco
+    (-118.2437, 34.0522),  # Los Angeles
+)
+
+# Create a polygon (boundary)
+polygon = Polygon(
+    (
+        (-122.4, 37.8),
+        (-122.4, 37.7),
+        (-122.5, 37.7),
+        (-122.5, 37.8),
+        (-122.4, 37.8),  # Close the polygon
+    )
+)
+```
+
+## Creating Geographic Data
+
+```python
+from django.contrib.gis.geos import Point
+from myapp.models import Location
+
+# Create location with point
+location = Location.objects.create(
+    name='Golden Gate Bridge',
+    point=Point(-122.4783, 37.8199, srid=4326)
+)
+
+# Create from coordinates
+location = Location(
+    name='Statue of Liberty',
+    point=Point(-74.0445, 40.6892)
+)
+location.save()
+
+# Update location
+location.point = Point(-74.0445, 40.6892)
+location.save()
+```
+
+## Geographic Queries
+
+### Distance Queries
+
+```python
+from django.contrib.gis.geos import Point
+from django.contrib.gis.measure import D  # Distance
+from myapp.models import Location
+
+# Reference point
+user_location = Point(-122.4194, 37.7749, srid=4326)  # San Francisco
+
+# Find locations within 10 km
+nearby = Location.objects.filter(
+    point__distance_lte=(user_location, D(km=10))
+)
+
+# Find locations within 5 miles
+nearby = Location.objects.filter(
+    point__distance_lte=(user_location, D(mi=5))
+)
+
+# Distance from a point
+from django.contrib.gis.db.models.functions import Distance
+
+locations = Location.objects.annotate(
+    distance=Distance('point', user_location)
+).order_by('distance')
+
+for loc in locations[:5]:
+    print(f'{loc.name}: {loc.distance.km:.2f} km')
+```
+
+### Spatial Lookups
+
+```python
+from django.contrib.gis.geos import Point, Polygon
+
+# Contains
+area = Polygon(
+    ((-122.5, 37.7), (-122.5, 37.9),
+     (-122.3, 37.9), (-122.3, 37.7),
+     (-122.5, 37.7))
+)
+locations = Location.objects.filter(point__within=area)
+
+# Intersects
+locations = Location.objects.filter(area__intersects=area)
+
+# Overlaps
+locations = Location.objects.filter(area__overlaps=area)
+
+# Touches
+locations = Location.objects.filter(area__touches=area)
+
+# Covers
+locations = Location.objects.filter(area__covers=point)
+
+# Contained by (bbcontains - bounding box contains)
+locations = Location.objects.filter(point__bbcontains=area)
+```
+
+### Distance Calculations
+
+```python
+from django.contrib.gis.geos import Point
+from django.contrib.gis.measure import Distance
+
+point1 = Point(-122.4194, 37.7749)  # San Francisco
+point2 = Point(-118.2437, 34.0522)  # Los Angeles
+
+# Calculate distance
+distance = point1.distance(point2)
+
+# Transform to different SRID for accurate distance
+point1.transform(3857)  # Web Mercator
+point2.transform(3857)
+distance_meters = point1.distance(point2)
+```
+
+## GeoQuerySet Methods
+
+```python
+from django.contrib.gis.db.models.functions import Area, Distance, Length
+
+# Calculate area
+locations = Location.objects.annotate(
+    calculated_area=Area('area')
+).filter(calculated_area__gt=1000000)  # > 1 million sq meters
+
+# Calculate perimeter
+locations = Location.objects.annotate(
+    perimeter=Length('area')
+)
+
+# Distance from point
+user_point = Point(-122.4194, 37.7749, srid=4326)
+locations = Location.objects.annotate(
+    distance=Distance('point', user_point)
+).order_by('distance')[:10]
+```
+
+## Geometry Operations
+
+```python
+from django.contrib.gis.geos import Point, Polygon
+
+point = Point(-122.4194, 37.7749)
+
+# Buffer (create area around point)
+buffered = point.buffer(0.1)  # Degrees
+print(type(buffered))  # Polygon
+
+# Union
+polygon1 = Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+polygon2 = Polygon(((0.5, 0.5), (0.5, 1.5), (1.5, 1.5), (1.5, 0.5), (0.5, 0.5)))
+union = polygon1.union(polygon2)
+
+# Intersection
+intersection = polygon1.intersection(polygon2)
+
+# Difference
+difference = polygon1.difference(polygon2)
+
+# Centroid
+centroid = polygon1.centroid
+
+# Envelope (bounding box)
+envelope = polygon1.envelope
+```
+
+## Admin Integration
+
+GeoDjango provides special admin widgets:
+
+```python admin.py
+from django.contrib.gis import admin
+from .models import Location
+
+@admin.register(Location)
+class LocationAdmin(admin.GISModelAdmin):
+    list_display = ['name', 'point']
+    
+    # Map widget settings
+    default_lon = -122.4194
+    default_lat = 37.7749
+    default_zoom = 12
+    
+    # Base map layer
+    map_template = 'gis/admin/openlayers.html'
+    openlayers_url = 'https://cdnjs.cloudflare.com/ajax/libs/openlayers/2.13.1/OpenLayers.js'
+```
+
+### OpenStreetMap Widget
+
+```python admin.py
+from django.contrib.gis import admin
+
+class LocationAdmin(admin.OSMGeoAdmin):
+    default_lon = -122.4194
+    default_lat = 37.7749
+    default_zoom = 12
+```
+
+## Forms and Widgets
+
+```python forms.py
+from django import forms
+from django.contrib.gis.forms import PointField
+from django.contrib.gis.geos import Point
+from .models import Location
+
+class LocationForm(forms.ModelForm):
+    class Meta:
+        model = Location
+        fields = ['name', 'point']
+        widgets = {
+            'point': forms.OSMWidget(attrs={
+                'map_width': 800,
+                'map_height': 500,
+                'default_zoom': 12,
+            })
+        }
+```
+
+## Serialization
+
+### GeoJSON
+
+```python views.py
+from django.contrib.gis.serializers.geojson import Serializer as GeoJSONSerializer
+from django.http import JsonResponse
+from .models import Location
+
+def locations_geojson(request):
+    locations = Location.objects.all()
+    serializer = GeoJSONSerializer()
+    geojson = serializer.serialize(
+        locations,
+        geometry_field='point',
+        fields=['name']
+    )
+    return JsonResponse(geojson, safe=False)
+```
+
+### Manual GeoJSON
+
+```python
+import json
+from django.contrib.gis.geos import GEOSGeometry
+
+# From GeoJSON
+geojson = {
+    'type': 'Point',
+    'coordinates': [-122.4194, 37.7749]
+}
+point = GEOSGeometry(json.dumps(geojson))
+
+# To GeoJSON
+geojson_output = point.geojson
+```
+
+## Coordinate Systems (SRID)
+
+```python
+from django.contrib.gis.geos import Point
+
+# WGS84 (GPS coordinates) - SRID 4326
+point_wgs84 = Point(-122.4194, 37.7749, srid=4326)
+
+# Transform to Web Mercator - SRID 3857
+point_mercator = point_wgs84.transform(3857, clone=True)
+
+# Transform in place
+point_wgs84.transform(3857)
+```
+
+### Common SRIDs
+
+- **4326**: WGS84 (GPS coordinates, latitude/longitude)
+- **3857**: Web Mercator (Google Maps, OpenStreetMap)
+- **2163**: US National Atlas Equal Area
+- **27700**: British National Grid
+
+## Spatial Indexes
+
+```python models.py
+from django.contrib.gis.db import models
+
+class Location(models.Model):
+    name = models.CharField(max_length=200)
+    point = models.PointField(spatial_index=True)  # Creates spatial index
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['point']),  # Additional index if needed
+        ]
+```
+
+## LayerMapping (Import Data)
+
+Import geographic data from shapefiles:
+
+```python load_data.py
+from django.contrib.gis.utils import LayerMapping
+from .models import Location
+
+# Mapping between shapefile fields and model fields
+location_mapping = {
+    'name': 'NAME',
+    'point': 'POINT',
+}
+
+def run(verbose=True):
+    lm = LayerMapping(
+        Location,
+        '/path/to/shapefile.shp',
+        location_mapping,
+        transform=True,  # Transform to model SRID
+        encoding='utf-8',
+    )
+    lm.save(strict=True, verbose=verbose)
+```
+
+## GeoDjango Database Functions
+
+```python
+from django.contrib.gis.db.models.functions import (
+    Area, Distance, Length, Perimeter,
+    Centroid, Envelope, Transform,
+    AsGeoJSON, AsKML, AsGML, AsSVG
+)
+
+# Calculate area
+locations = Location.objects.annotate(area_size=Area('area'))
+
+# Get centroid
+locations = Location.objects.annotate(center=Centroid('area'))
+
+# Transform coordinates
+locations = Location.objects.annotate(
+    mercator_point=Transform('point', 3857)
+)
+
+# Export as GeoJSON
+locations = Location.objects.annotate(
+    geojson=AsGeoJSON('point')
+)
+```
+
+## Performance Tips
+
+### Use Spatial Indexes
+
+```python models.py
+class Location(models.Model):
+    point = models.PointField(spatial_index=True)
+```
+
+### Use Geography vs Geometry
+
+```python models.py
+# Geography (accurate distance on sphere)
+class LocationGeo(models.Model):
+    point = models.PointField(geography=True)
+
+# Geometry (faster, less accurate)
+class LocationGeom(models.Model):
+    point = models.PointField(geography=False)
+```
+
+### Simplify Geometries
+
+```python
+from django.contrib.gis.geos import Polygon
+
+complex_polygon = Polygon(...)
+# Simplify with tolerance
+simplified = complex_polygon.simplify(tolerance=0.01)
+```
+
+## Testing
+
+```python tests.py
+from django.contrib.gis.geos import Point
+from django.test import TestCase
+from .models import Location
+
+class LocationTestCase(TestCase):
+    def setUp(self):
+        self.location = Location.objects.create(
+            name='Test Location',
+            point=Point(-122.4194, 37.7749, srid=4326)
+        )
+    
+    def test_location_point(self):
+        self.assertEqual(self.location.point.x, -122.4194)
+        self.assertEqual(self.location.point.y, 37.7749)
+    
+    def test_distance_query(self):
+        from django.contrib.gis.measure import D
+        
+        nearby = Location.objects.filter(
+            point__distance_lte=(
+                Point(-122.4, 37.7, srid=4326),
+                D(km=10)
+            )
+        )
+        self.assertIn(self.location, nearby)
+```
+
+## Key Classes Reference
+
+### BaseSpatialField
+
+Location: `django.contrib.gis.db.models.fields.BaseSpatialField`
+
+Base class for all geographic fields.
+
+### Point, Polygon, LineString
+
+Location: `django.contrib.gis.geos`
+
+GEOS geometry classes for spatial data.
+
+### GISModelAdmin
+
+Location: `django.contrib.gis.admin.GISModelAdmin`
+
+Admin class with map widget support.
+
+<Note>
+GeoDjango requires GEOS, GDAL, and PROJ libraries installed on your system. PostGIS is required for PostgreSQL.
+</Note>

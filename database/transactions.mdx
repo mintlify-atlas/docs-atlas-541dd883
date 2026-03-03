@@ -1,0 +1,578 @@
+---
+title: 'Database Transactions'
+description: 'Learn how to use database transactions in Django with atomic(), savepoints, and transaction management'
+---
+
+## Introduction
+
+Database transactions ensure that a series of database operations are executed as a single unit of work. Django provides transaction support through the `django.db.transaction` module.
+
+## The atomic() Decorator and Context Manager
+
+The `atomic()` function is the main way to handle transactions in Django. It can be used as both a decorator and a context manager.
+
+From Django's source at `/django/db/transaction.py:142`:
+
+```python
+class Atomic(ContextDecorator):
+    """
+    Guarantee the atomic execution of a given block.
+
+    An instance can be used either as a decorator or as a context manager.
+
+    When it's used as a decorator, __call__ wraps the execution of the
+    decorated function in the instance itself, used as a context manager.
+
+    When it's used as a context manager, __enter__ creates a transaction or a
+    savepoint, depending on whether a transaction is already in progress, and
+    __exit__ commits the transaction or releases the savepoint on normal exit,
+    and rolls back the transaction or to the savepoint on exceptions.
+    """
+```
+
+### Using atomic() as a Decorator
+
+```python
+from django.db import transaction
+from myapp.models import Account, Transaction
+
+@transaction.atomic
+def transfer_funds(from_account_id, to_account_id, amount):
+    """
+    Transfer funds between accounts.
+    All operations succeed or all fail.
+    """
+    # Deduct from source account
+    from_account = Account.objects.get(id=from_account_id)
+    from_account.balance -= amount
+    from_account.save()
+    
+    # Add to destination account
+    to_account = Account.objects.get(id=to_account_id)
+    to_account.balance += amount
+    to_account.save()
+    
+    # Record the transaction
+    Transaction.objects.create(
+        from_account=from_account,
+        to_account=to_account,
+        amount=amount
+    )
+    
+    # If any exception occurs, all changes are rolled back
+```
+
+### Using atomic() as a Context Manager
+
+```python
+from django.db import transaction
+
+def process_order(order_data):
+    order = Order.objects.create(**order_data)
+    
+    try:
+        with transaction.atomic():
+            # Create order items
+            for item_data in order_data['items']:
+                OrderItem.objects.create(
+                    order=order,
+                    **item_data
+                )
+            
+            # Update inventory
+            for item_data in order_data['items']:
+                product = Product.objects.get(id=item_data['product_id'])
+                product.stock -= item_data['quantity']
+                product.save()
+            
+            # If all succeeds, changes are committed
+    except Exception as e:
+        # If any error occurs, changes within atomic block are rolled back
+        order.status = 'failed'
+        order.save()
+        raise
+```
+
+<Note>
+When using `atomic()` as a decorator, the entire function executes within a transaction. When used as a context manager, only the code within the `with` block is transactional.
+</Note>
+
+## Autocommit Mode
+
+By default, Django runs in autocommit mode. Each database query is immediately committed unless you're inside an `atomic()` block.
+
+```python
+from django.db import transaction
+
+# Check autocommit status
+is_autocommit = transaction.get_autocommit()
+
+# Manually control autocommit (not recommended)
+transaction.set_autocommit(False)
+try:
+    # Your code here
+    transaction.commit()
+except:
+    transaction.rollback()
+finally:
+    transaction.set_autocommit(True)
+```
+
+<Warning>
+Manually controlling autocommit is rarely necessary and can lead to bugs. Always prefer using `atomic()` for transaction management.
+</Warning>
+
+## Nested Transactions with Savepoints
+
+When you nest `atomic()` blocks, Django uses database savepoints to implement nested transactions.
+
+From Django's source at `/django/db/transaction.py:48`:
+
+```python
+def savepoint(using=None):
+    """
+    Create a savepoint (if supported and required by the backend) inside the
+    current transaction. Return an identifier for the savepoint that will be
+    used for the subsequent rollback or commit.
+    """
+    return get_connection(using).savepoint()
+
+def savepoint_rollback(sid, using=None):
+    """
+    Roll back the most recent savepoint (if one exists). Do nothing if
+    savepoints are not supported.
+    """
+    get_connection(using).savepoint_rollback(sid)
+
+def savepoint_commit(sid, using=None):
+    """
+    Commit the most recent savepoint (if one exists). Do nothing if
+    savepoints are not supported.
+    """
+    get_connection(using).savepoint_commit(sid)
+```
+
+### Nested atomic() Blocks
+
+```python
+from django.db import transaction
+
+@transaction.atomic
+def create_user_with_profile(user_data, profile_data):
+    # Outer transaction
+    user = User.objects.create(**user_data)
+    
+    try:
+        with transaction.atomic():
+            # Inner transaction (savepoint)
+            profile = Profile.objects.create(
+                user=user,
+                **profile_data
+            )
+            
+            # Send welcome email (might fail)
+            send_welcome_email(user.email)
+    except EmailError:
+        # Profile creation rolled back, but user creation preserved
+        logger.error(f"Failed to send welcome email to {user.email}")
+    
+    return user
+```
+
+### Manual Savepoint Management
+
+```python
+from django.db import transaction
+
+def complex_operation():
+    with transaction.atomic():
+        # Create a savepoint
+        sid = transaction.savepoint()
+        
+        try:
+            # Risky operation
+            perform_risky_operation()
+            # Commit the savepoint
+            transaction.savepoint_commit(sid)
+        except Exception:
+            # Roll back to savepoint
+            transaction.savepoint_rollback(sid)
+            # Continue with alternative approach
+            perform_alternative_operation()
+```
+
+## Disabling Savepoints
+
+You can disable automatic savepoint creation for performance:
+
+```python
+@transaction.atomic(savepoint=False)
+def bulk_operation():
+    # No savepoint created
+    # Slightly better performance
+    # But cannot be nested safely
+    for i in range(1000):
+        Model.objects.create(value=i)
+```
+
+<Tip>
+Disable savepoints for bulk operations where you don't need nested transaction support. This can improve performance in high-throughput scenarios.
+</Tip>
+
+## Transaction Isolation and Locking
+
+### Select for Update
+
+Lock rows to prevent concurrent modifications:
+
+```python
+from django.db import transaction
+
+@transaction.atomic
+def decrement_stock(product_id, quantity):
+    # Lock the product row until transaction completes
+    product = Product.objects.select_for_update().get(id=product_id)
+    
+    if product.stock < quantity:
+        raise ValueError("Insufficient stock")
+    
+    product.stock -= quantity
+    product.save()
+    
+    # Row is automatically unlocked when transaction commits
+```
+
+### Select for Update Variants
+
+```python
+# Wait for lock to be released (default)
+product = Product.objects.select_for_update().get(id=1)
+
+# Skip locked rows (PostgreSQL, Oracle, MySQL 8.0+)
+available_products = Product.objects.select_for_update(skip_locked=True).filter(
+    stock__gt=0
+)
+
+# Raise exception if row is locked (PostgreSQL, Oracle, MySQL 8.0+)
+try:
+    product = Product.objects.select_for_update(nowait=True).get(id=1)
+except DatabaseError:
+    print("Product is currently locked")
+
+# Lock related objects too
+order = Order.objects.select_for_update(of=('self', 'customer')).get(id=1)
+```
+
+<Warning>
+`select_for_update()` must be used inside a transaction (`atomic()` block). Using it outside a transaction will raise an exception.
+</Warning>
+
+## Handling Transaction Errors
+
+### Rolling Back on Errors
+
+```python
+from django.db import transaction, IntegrityError
+
+def create_user(username, email):
+    try:
+        with transaction.atomic():
+            user = User.objects.create(
+                username=username,
+                email=email
+            )
+            
+            # If this fails, user creation is also rolled back
+            Profile.objects.create(user=user)
+            
+            return user
+    except IntegrityError as e:
+        # Handle duplicate username/email
+        raise ValueError(f"User creation failed: {e}")
+```
+
+### Forcing Rollback
+
+Use `set_rollback()` to force a rollback:
+
+```python
+from django.db import transaction
+
+def risky_operation():
+    with transaction.atomic():
+        # Make some changes
+        obj = Model.objects.create(value='test')
+        
+        # Check some condition
+        if not validate_business_rules(obj):
+            # Force rollback without raising exception
+            transaction.set_rollback(True)
+            return False
+        
+        return True
+```
+
+From Django's source at `/django/db/transaction.py:85`:
+
+```python
+def set_rollback(rollback, using=None):
+    """
+    Set or unset the "needs rollback" flag -- for *advanced use* only.
+
+    When `rollback` is `True`, trigger a rollback when exiting the innermost
+    enclosing atomic block that has `savepoint=True` (that's the default). Use
+    this to force a rollback without raising an exception.
+
+    When `rollback` is `False`, prevent such a rollback. Use this only after
+    rolling back to a known-good state! Otherwise, you break the atomic block
+    and data corruption may occur.
+    """
+    return get_connection(using).set_rollback(rollback)
+```
+
+## on_commit Hooks
+
+Execute code after a successful transaction commit:
+
+```python
+from django.db import transaction
+
+def send_notification(user_id):
+    # This function runs only if transaction succeeds
+    user = User.objects.get(id=user_id)
+    send_email(user.email, "Account created successfully")
+
+@transaction.atomic
+def create_user(username, email):
+    user = User.objects.create(username=username, email=email)
+    
+    # Register callback to run after commit
+    transaction.on_commit(
+        lambda: send_notification(user.id)
+    )
+    
+    return user
+```
+
+From Django's source at `/django/db/transaction.py:129`:
+
+```python
+def on_commit(func, using=None, robust=False):
+    """
+    Register `func` to be called when the current transaction is committed.
+    If the current transaction is rolled back, `func` will not be called.
+    """
+    get_connection(using).on_commit(func, robust)
+```
+
+### Robust on_commit
+
+```python
+def unreliable_task():
+    # This might fail
+    external_api.notify()
+
+@transaction.atomic
+def create_order(order_data):
+    order = Order.objects.create(**order_data)
+    
+    # If this callback fails, it won't affect the transaction
+    transaction.on_commit(
+        lambda: unreliable_task(),
+        robust=True
+    )
+```
+
+<Note>
+Callbacks registered with `on_commit()` run after the transaction is committed. If you're inside nested `atomic()` blocks, the callback runs after the outermost transaction commits.
+</Note>
+
+## Multiple Database Transactions
+
+Specify which database to use:
+
+```python
+from django.db import transaction
+
+# Transaction on specific database
+@transaction.atomic(using='default')
+def operation_on_default():
+    Model.objects.using('default').create(value='test')
+
+# Multiple databases
+def multi_database_operation():
+    with transaction.atomic(using='default'):
+        DefaultModel.objects.create(value='test')
+    
+    with transaction.atomic(using='replica'):
+        ReplicaModel.objects.create(value='test')
+
+# Coordinated transaction across databases (not atomic across both!)
+def pseudo_distributed_transaction():
+    try:
+        with transaction.atomic(using='db1'):
+            Model1.objects.using('db1').create(value='test')
+            
+            with transaction.atomic(using='db2'):
+                Model2.objects.using('db2').create(value='test')
+    except Exception:
+        # Note: db1 transaction might have committed already
+        # True distributed transactions require XA/2PC
+        pass
+```
+
+<Warning>
+Django does not support true distributed transactions across multiple databases. Each database has its own independent transaction. For true distributed transactions, you need a transaction coordinator like XA.
+</Warning>
+
+## Transaction Best Practices
+
+### 1. Keep Transactions Short
+
+```python
+# Good: Short transaction
+@transaction.atomic
+def update_user(user_id, data):
+    user = User.objects.get(id=user_id)
+    user.name = data['name']
+    user.save()
+
+# Bad: Long-running transaction
+@transaction.atomic
+def process_batch():
+    for i in range(10000):  # Holds lock for too long
+        process_item(i)
+        time.sleep(0.1)  # Never sleep in a transaction!
+```
+
+### 2. Avoid External API Calls in Transactions
+
+```python
+# Bad: External API call in transaction
+@transaction.atomic
+def create_order(order_data):
+    order = Order.objects.create(**order_data)
+    payment_api.charge(order.amount)  # Don't do this!
+    order.status = 'paid'
+    order.save()
+
+# Good: API call after transaction
+@transaction.atomic
+def create_order(order_data):
+    order = Order.objects.create(**order_data)
+    return order
+
+def process_order(order_data):
+    order = create_order(order_data)
+    try:
+        payment_api.charge(order.amount)
+        order.status = 'paid'
+        order.save()
+    except PaymentError:
+        order.status = 'failed'
+        order.save()
+```
+
+### 3. Use select_for_update for Concurrent Updates
+
+```python
+# Good: Prevents race conditions
+@transaction.atomic
+def increment_counter(counter_id):
+    counter = Counter.objects.select_for_update().get(id=counter_id)
+    counter.value += 1
+    counter.save()
+
+# Bad: Race condition possible
+@transaction.atomic
+def increment_counter(counter_id):
+    counter = Counter.objects.get(id=counter_id)  # No lock
+    counter.value += 1  # Another request might update between get and save
+    counter.save()
+```
+
+### 4. Use F Expressions for Atomic Updates
+
+```python
+from django.db.models import F
+
+# Good: Atomic database-level update
+Counter.objects.filter(id=counter_id).update(value=F('value') + 1)
+
+# Also good but requires transaction
+@transaction.atomic
+def increment_counter(counter_id):
+    counter = Counter.objects.select_for_update().get(id=counter_id)
+    counter.value = F('value') + 1
+    counter.save()
+```
+
+## Durable Transactions
+
+Durable transactions cannot be nested (raises RuntimeError if nested):
+
+```python
+@transaction.atomic(durable=True)
+def critical_operation():
+    # This ensures the operation is not nested in another transaction
+    # Useful for operations that must be immediately committed
+    CriticalModel.objects.create(value='important')
+```
+
+<Tip>
+Use durable transactions for operations that must be immediately committed to the database, such as audit logs or payment records.
+</Tip>
+
+## Common Patterns
+
+### Idempotent Operations
+
+```python
+@transaction.atomic
+def idempotent_create(unique_key, data):
+    obj, created = Model.objects.get_or_create(
+        unique_key=unique_key,
+        defaults=data
+    )
+    return obj, created
+```
+
+### Batch Processing with Transactions
+
+```python
+def process_batch(items, batch_size=100):
+    for i in range(0, len(items), batch_size):
+        batch = items[i:i + batch_size]
+        
+        with transaction.atomic():
+            for item in batch:
+                process_item(item)
+```
+
+### Retry on Deadlock
+
+```python
+from django.db import transaction, DatabaseError
+import time
+
+def retry_on_deadlock(max_retries=3):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except DatabaseError as e:
+                    if 'deadlock' in str(e).lower() and attempt < max_retries - 1:
+                        time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                        continue
+                    raise
+        return wrapper
+    return decorator
+
+@retry_on_deadlock(max_retries=3)
+@transaction.atomic
+def concurrent_update(record_id):
+    record = Record.objects.select_for_update().get(id=record_id)
+    record.process()
+    record.save()
+```

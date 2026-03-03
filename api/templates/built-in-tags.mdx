@@ -1,0 +1,927 @@
+---
+title: Built-in Template Tags
+description: Complete reference for Django's built-in template tags
+---
+
+Django's built-in template tags provide control flow, template inheritance, URL handling, and more. All tags use the `{% tag %}` syntax.
+
+## Template Inheritance
+
+<Accordion title="{% block %}">
+  Define a block that child templates can override.
+
+  **Syntax:**
+  ```django
+  {% block block_name %}
+      Default content
+  {% endblock %}
+  ```
+
+  **Example:**
+  ```django
+  {# base.html #}
+  <!DOCTYPE html>
+  <html>
+  <head>
+      {% block title %}<title>My Site</title>{% endblock %}
+  </head>
+  <body>
+      {% block content %}{% endblock %}
+  </body>
+  </html>
+  ```
+
+  **Notes:**
+  - Block names must be unique within a template
+  - Use `{{ block.super }}` to include parent content
+  - Can be nested
+</Accordion>
+
+<Accordion title="{% extends %}">
+  Declare that this template extends a parent template.
+
+  **Syntax:**
+  ```django
+  {% extends "base.html" %}
+  {% extends variable_name %}
+  ```
+
+  **Example:**
+  ```django
+  {% extends "blog/base.html" %}
+
+  {% block title %}<title>Blog Post</title>{% endblock %}
+
+  {% block content %}
+      <h1>{{ post.title }}</h1>
+      <p>{{ post.body }}</p>
+  {% endblock %}
+  ```
+
+  **Notes:**
+  - Must be the first tag in the template
+  - Can use a variable for dynamic parent selection
+  - Only content inside `{% block %}` tags is rendered
+</Accordion>
+
+<Accordion title="{% include %}">
+  Load and render another template with the current context.
+
+  **Syntax:**
+  ```django
+  {% include "template_name.html" %}
+  {% include template_variable %}
+  {% include "template.html" with var1=value1 var2=value2 %}
+  {% include "template.html" only %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Basic include #}
+  {% include "sidebar.html" %}
+
+  {# With additional context #}
+  {% include "comment.html" with comment=comment %}
+
+  {# Only specified variables (no parent context) #}
+  {% include "widget.html" with title="My Widget" only %}
+
+  {# Dynamic template name #}
+  {% include template_name %}
+  ```
+
+  **Notes:**
+  - Included template has access to parent context by default
+  - Use `with` to add extra variables
+  - Use `only` to isolate context
+</Accordion>
+
+## Control Flow
+
+<Accordion title="{% if %}">
+  Evaluate a condition and render content conditionally.
+
+  **Syntax:**
+  ```django
+  {% if condition %}
+      content
+  {% elif other_condition %}
+      other content
+  {% else %}
+      default content
+  {% endif %}
+  ```
+
+  **Operators:**
+  - `==`, `!=`, `<`, `>`, `<=`, `>=`
+  - `and`, `or`, `not`
+  - `in`, `not in`
+
+  **Examples:**
+  ```django
+  {% if user.is_authenticated %}
+      <p>Welcome, {{ user.username }}!</p>
+  {% else %}
+      <p>Please log in.</p>
+  {% endif %}
+
+  {% if athlete_list and coach_list %}
+      Both available.
+  {% endif %}
+
+  {% if articles|length >= 5 %}
+      Many articles!
+  {% endif %}
+
+  {% if "admin" in user.groups %}
+      Admin panel
+  {% endif %}
+  ```
+
+  **Notes:**
+  - Operators must have spaces: `{% if 1 > 2 %}` not `{% if 1>2 %}`
+  - Operator precedence follows Python
+  - Can use filters in conditions
+</Accordion>
+
+<Accordion title="{% for %}">
+  Loop over items in a sequence.
+
+  **Syntax:**
+  ```django
+  {% for item in list %}
+      {{ item }}
+  {% empty %}
+      No items
+  {% endfor %}
+  ```
+
+  **Loop Variables:**
+  - `forloop.counter` - Current iteration (1-indexed)
+  - `forloop.counter0` - Current iteration (0-indexed)
+  - `forloop.revcounter` - Iterations from end (1-indexed)
+  - `forloop.revcounter0` - Iterations from end (0-indexed)
+  - `forloop.first` - True on first iteration
+  - `forloop.last` - True on last iteration
+  - `forloop.parentloop` - Parent loop in nested loops
+
+  **Examples:**
+  ```django
+  {# Basic loop #}
+  <ul>
+  {% for athlete in athlete_list %}
+      <li>{{ athlete.name }}</li>
+  {% endfor %}
+  </ul>
+
+  {# With empty clause #}
+  {% for item in items %}
+      {{ item }}
+  {% empty %}
+      <p>No items found.</p>
+  {% endfor %}
+
+  {# Reversed #}
+  {% for item in list reversed %}
+      {{ item }}
+  {% endfor %}
+
+  {# Unpacking #}
+  {% for key, value in dict.items %}
+      {{ key }}: {{ value }}
+  {% endfor %}
+
+  {# Using forloop variables #}
+  {% for item in items %}
+      <li class="{% if forloop.first %}first{% endif %}">
+          {{ forloop.counter }}. {{ item }}
+      </li>
+  {% endfor %}
+  ```
+
+  **Notes:**
+  - Use `reversed` to iterate in reverse
+  - Can unpack tuples/lists
+  - `{% empty %}` is shorthand for checking if list is empty
+</Accordion>
+
+<Accordion title="{% ifchanged %}">
+  Check if a value has changed from the last iteration.
+
+  **Syntax:**
+  ```django
+  {% ifchanged %}
+      content
+  {% endifchanged %}
+
+  {% ifchanged value1 value2 %}
+      content
+  {% endifchanged %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Track rendered content changes #}
+  {% for date in days %}
+      {% ifchanged %}
+          <h3>{{ date|date:"F" }}</h3>
+      {% endifchanged %}
+      <a href="{{ date }}">{{ date|date:"j" }}</a>
+  {% endfor %}
+
+  {# Track specific variable changes #}
+  {% for date in days %}
+      {% ifchanged date.date %}
+          {{ date.date }}
+      {% endifchanged %}
+      {% ifchanged date.hour date.date %}
+          {{ date.hour }}
+      {% endifchanged %}
+  {% endfor %}
+
+  {# With else clause #}
+  {% ifchanged post.category %}
+      <h2>{{ post.category }}</h2>
+  {% else %}
+      <hr>
+  {% endifchanged %}
+  ```
+
+  **Notes:**
+  - Without arguments, compares rendered output
+  - With arguments, compares specified variables
+  - State is bound to the nearest for loop
+</Accordion>
+
+## Variable Assignment
+
+<Accordion title="{% with %}">
+  Cache complex variables under simpler names.
+
+  **Syntax:**
+  ```django
+  {% with variable=value %}
+      {{ variable }}
+  {% endwith %}
+
+  {% with var1=value1 var2=value2 %}
+      content
+  {% endwith %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Single variable #}
+  {% with total=business.employees.count %}
+      {{ total }} employee{{ total|pluralize }}
+  {% endwith %}
+
+  {# Multiple variables #}
+  {% with alpha=1 beta=2 %}
+      {{ alpha }} + {{ beta }} = {{ alpha|add:beta }}
+  {% endwith %}
+
+  {# Avoid repeated expensive calls #}
+  {% with expensive_query=blog.entries.all %}
+      {% for entry in expensive_query %}
+          {{ entry.title }}
+      {% endfor %}
+  {% endwith %}
+  ```
+
+  **Legacy syntax (still supported):**
+  ```django
+  {% with business.employees.count as total %}
+      {{ total }}
+  {% endwith %}
+  ```
+</Accordion>
+
+## URL Handling
+
+<Accordion title="{% url %}">
+  Return an absolute URL path matching a given view.
+
+  **Syntax:**
+  ```django
+  {% url 'url_name' %}
+  {% url 'url_name' arg1 arg2 %}
+  {% url 'url_name' key1=val1 key2=val2 %}
+  {% url 'url_name' as variable %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Named URL with no arguments #}
+  <a href="{% url 'home' %}">Home</a>
+
+  {# Positional arguments #}
+  <a href="{% url 'article-detail' article.id %}">Read more</a>
+
+  {# Keyword arguments #}
+  <a href="{% url 'article-detail' pk=article.pk %}">{{ article.title }}</a>
+
+  {# Store in variable #}
+  {% url 'login' as login_url %}
+  {% if login_url %}
+      <a href="{{ login_url }}">Login</a>
+  {% endif %}
+
+  {# Dynamic view name #}
+  {% url view_name %}
+  ```
+
+  **Notes:**
+  - Returns empty string if reverse match fails (when using `as`)
+  - Otherwise raises `NoReverseMatch`
+  - Arguments can be variables or literals
+  - Don't mix positional and keyword arguments
+</Accordion>
+
+<Accordion title="{% querystring %}">
+  Build a query string by modifying the current request's GET parameters.
+
+  **Syntax:**
+  ```django
+  {% querystring key=value %}
+  {% querystring key=None %}  {# Remove key #}
+  {% querystring dict key=value %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Add/update parameter #}
+  <a href="{% querystring page=2 %}">Next</a>
+  {# ?page=2 #}
+
+  {# Remove parameter #}
+  <a href="{% querystring filter=None %}">Clear filter</a>
+
+  {# Multiple parameters #}
+  <a href="{% querystring page=1 sort='date' %}">Sort by date</a>
+
+  {# Pagination example #}
+  {% if page_obj.has_next %}
+      <a href="{% querystring page=page_obj.next_page_number %}">
+          Next
+      </a>
+  {% endif %}
+
+  {# Custom QueryDict #}
+  {% querystring my_query_dict foo=3 %}
+  ```
+
+  **Notes:**
+  - Returns query string with `?` prefix
+  - Uses `request.GET` by default
+  - Setting value to `None` removes the parameter
+  - Preserves other existing parameters
+</Accordion>
+
+## Template Loading
+
+<Accordion title="{% load %}">
+  Load custom template tag library.
+
+  **Syntax:**
+  ```django
+  {% load library_name %}
+  {% load tag_name from library %}
+  {% load library1 library2 %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Load entire library #}
+  {% load static %}
+  {% load humanize %}
+
+  {# Load specific tags/filters #}
+  {% load render_table from django_tables2 %}
+
+  {# Load multiple libraries #}
+  {% load static i18n %}
+  ```
+
+  **Built-in libraries:**
+  - `static` - Static file handling
+  - `i18n` - Internationalization
+  - `humanize` - Human-friendly data
+  - `tz` - Timezone support
+</Accordion>
+
+## Utilities
+
+<Accordion title="{% csrf_token %}">
+  Output a CSRF token for forms.
+
+  **Syntax:**
+  ```django
+  {% csrf_token %}
+  ```
+
+  **Example:**
+  ```django
+  <form method="post">
+      {% csrf_token %}
+      {{ form }}
+      <button type="submit">Submit</button>
+  </form>
+  ```
+
+  **Output:**
+  ```html
+  <input type="hidden" name="csrfmiddlewaretoken" value="...">
+  ```
+
+  **Notes:**
+  - Required for POST forms
+  - Context must include CSRF token (use RequestContext)
+</Accordion>
+
+<Accordion title="{% cycle %}">
+  Cycle through values each time the tag is encountered.
+
+  **Syntax:**
+  ```django
+  {% cycle 'value1' 'value2' ... %}
+  {% cycle 'value1' 'value2' as name %}
+  {% cycle name %}
+  {% cycle 'value1' 'value2' as name silent %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Alternate row colors #}
+  {% for item in items %}
+      <tr class="{% cycle 'odd' 'even' %}">
+          <td>{{ item }}</td>
+      </tr>
+  {% endfor %}
+
+  {# Named cycle for reuse #}
+  {% cycle 'red' 'blue' 'green' as colors %}
+  <div style="color: {% cycle colors %}">First</div>
+  <div style="color: {% cycle colors %}">Second</div>
+
+  {# Silent mode (store in variable without output) #}
+  {% for item in items %}
+      {% cycle 'odd' 'even' as rowclass silent %}
+      <tr class="{{ rowclass }}">
+          <td>{{ item }}</td>
+      </tr>
+  {% endfor %}
+  ```
+</Accordion>
+
+<Accordion title="{% resetcycle %}">
+  Reset a cycle tag to its first value.
+
+  **Syntax:**
+  ```django
+  {% resetcycle %}
+  {% resetcycle cycle_name %}
+  ```
+
+  **Example:**
+  ```django
+  {% for group in groups %}
+      <h2>{{ group.name }}</h2>
+      {% resetcycle %}  {# Reset for each group #}
+      {% for item in group.items %}
+          <div class="{% cycle 'odd' 'even' %}">{{ item }}</div>
+      {% endfor %}
+  {% endfor %}
+  ```
+</Accordion>
+
+<Accordion title="{% firstof %}">
+  Output the first variable that is not False.
+
+  **Syntax:**
+  ```django
+  {% firstof var1 var2 var3 %}
+  {% firstof var1 var2 var3 "fallback" %}
+  {% firstof var1 var2 as myvar %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Display first non-empty value #}
+  {% firstof user.nickname user.first_name user.username %}
+
+  {# With fallback #}
+  {% firstof custom_title page_title "Untitled" %}
+
+  {# Store in variable #}
+  {% firstof var1 var2 var3 as value %}
+  {% if value %}
+      {{ value }}
+  {% endif %}
+  ```
+
+  **Equivalent to:**
+  ```django
+  {% if var1 %}
+      {{ var1 }}
+  {% elif var2 %}
+      {{ var2 }}
+  {% elif var3 %}
+      {{ var3 }}
+  {% endif %}
+  ```
+</Accordion>
+
+<Accordion title="{% now %}">
+  Display the current date and/or time.
+
+  **Syntax:**
+  ```django
+  {% now "format_string" %}
+  {% now "format_string" as variable %}
+  ```
+
+  **Format:** Uses PHP date() format (see https://php.net/date)
+
+  **Examples:**
+  ```django
+  It is {% now "jS F Y H:i" %}
+  {# It is 4th March 2026 15:30 #}
+
+  {% now "Y" as current_year %}
+  Copyright {{ current_year }}
+
+  {# Common formats #}
+  {% now "Y-m-d" %}  {# 2026-03-04 #}
+  {% now "H:i" %}    {# 15:30 #}
+  {% now "D d M Y" %} {# Wed 04 Mar 2026 #}
+  ```
+</Accordion>
+
+<Accordion title="{% regroup %}">
+  Regroup a list of objects by a common attribute.
+
+  **Syntax:**
+  ```django
+  {% regroup list by attribute as grouped %}
+  ```
+
+  **Example:**
+  ```django
+  {% regroup musicians by instrument as grouped %}
+  <ul>
+  {% for group in grouped %}
+      <li>{{ group.grouper }}
+          <ul>
+          {% for musician in group.list %}
+              <li>{{ musician.name }}</li>
+          {% endfor %}
+          </ul>
+      </li>
+  {% endfor %}
+  </ul>
+  ```
+
+  **Result structure:**
+  - `group.grouper` - The value grouped by
+  - `group.list` - List of items with that value
+
+  **Notes:**
+  - Input list must be sorted by the grouping attribute
+  - Use `dictsort` filter to sort first: `{% regroup data|dictsort:"attr" by attr as grouped %}`
+</Accordion>
+
+<Accordion title="{% widthratio %}">
+  Calculate a ratio for creating bar charts and similar visualizations.
+
+  **Syntax:**
+  ```django
+  {% widthratio current_value max_value max_width %}
+  {% widthratio current_value max_value max_width as variable %}
+  ```
+
+  **Formula:** `(current_value / max_value) * max_width`
+
+  **Examples:**
+  ```django
+  {# Bar chart #}
+  <img src="bar.png" width="{% widthratio score 100 200 %}" />
+  {# If score=75, width=150 (75/100 * 200) #}
+
+  {# Store in variable #}
+  {% widthratio this_value max_value 100 as percentage %}
+  <div style="width: {{ percentage }}%"></div>
+
+  {# Progress bar #}
+  {% widthratio progress total 100 as pct %}
+  <div class="progress-bar" style="width: {{ pct }}%">
+      {{ pct }}%
+  </div>
+  ```
+</Accordion>
+
+## Text Processing
+
+<Accordion title="{% filter %}">
+  Filter the contents of a block through one or more filters.
+
+  **Syntax:**
+  ```django
+  {% filter filter_name %}
+      content
+  {% endfilter %}
+
+  {% filter filter1|filter2:arg %}
+      content
+  {% endfilter %}
+  ```
+
+  **Examples:**
+  ```django
+  {% filter lower|title %}
+      THIS IS A HEADING
+  {% endfilter %}
+  {# Output: This Is A Heading #}
+
+  {% filter force_escape|lower %}
+      <b>Bold HTML</b>
+  {% endfilter %}
+  {# Output: &lt;b&gt;bold html&lt;/b&gt; #}
+
+  {% filter linebreaksbr %}
+      Line 1
+      Line 2
+  {% endfilter %}
+  ```
+
+  **Notes:**
+  - Cannot use `escape` or `safe` filters (use `{% autoescape %}` instead)
+  - Can chain multiple filters
+</Accordion>
+
+<Accordion title="{% autoescape %}">
+  Control auto-escaping for a block.
+
+  **Syntax:**
+  ```django
+  {% autoescape on %}
+      content
+  {% endautoescape %}
+
+  {% autoescape off %}
+      content
+  {% endautoescape %}
+  ```
+
+  **Examples:**
+  ```django
+  {% autoescape off %}
+      {{ body }}  {# Will not be escaped #}
+  {% endautoescape %}
+
+  {% autoescape on %}
+      {{ user_input }}  {# Will be escaped #}
+  {% endautoescape %}
+  ```
+
+  **Notes:**
+  - Auto-escaping is on by default
+  - Use `{{ var|safe }}` to mark individual variables as safe
+</Accordion>
+
+<Accordion title="{% verbatim %}">
+  Prevent the template engine from rendering a block.
+
+  **Syntax:**
+  ```django
+  {% verbatim %}
+      content
+  {% endverbatim %}
+
+  {% verbatim tag_name %}
+      content
+  {% endverbatim tag_name %}
+  ```
+
+  **Examples:**
+  ```django
+  {% verbatim %}
+      {{if dying}}Still using Mustache.js{{/if}}
+  {% endverbatim %}
+
+  {# With custom end tag #}
+  {% verbatim myblock %}
+      {% This won't be processed %}
+      {% endverbatim %}  {# This is literal text #}
+  {% endverbatim myblock %}
+  ```
+
+  **Use cases:**
+  - Embedding other template syntaxes (Mustache, Handlebars)
+  - Showing Django template code examples
+</Accordion>
+
+<Accordion title="{% spaceless %}">
+  Remove whitespace between HTML tags.
+
+  **Syntax:**
+  ```django
+  {% spaceless %}
+      html content
+  {% endspaceless %}
+  ```
+
+  **Example:**
+  ```django
+  {% spaceless %}
+      <p>
+          <a href="foo/">Foo</a>
+      </p>
+  {% endspaceless %}
+  ```
+
+  **Output:**
+  ```html
+  <p><a href="foo/">Foo</a></p>
+  ```
+
+  **Notes:**
+  - Only removes space between tags, not inside tags
+  - Doesn't remove space between tags and text
+</Accordion>
+
+<Accordion title="{% lorem %}">
+  Generate random Lorem Ipsum text.
+
+  **Syntax:**
+  ```django
+  {% lorem %}
+  {% lorem count %}
+  {% lorem count method %}
+  {% lorem count method random %}
+  ```
+
+  **Parameters:**
+  - `count` - Number of paragraphs/words (default: 1)
+  - `method` - `w` (words), `p` (HTML paragraphs), `b` (plain blocks, default)
+  - `random` - Use random text instead of common Lorem Ipsum
+
+  **Examples:**
+  ```django
+  {% lorem %}  {# One common paragraph #}
+  {% lorem 3 p %}  {# Three HTML paragraphs #}
+  {% lorem 10 w random %}  {# 10 random words #}
+  {% lorem 2 b %}  {# Two plain text blocks #}
+  ```
+</Accordion>
+
+## Debugging
+
+<Accordion title="{% debug %}">
+  Output debugging information about the current context and available modules.
+
+  **Syntax:**
+  ```django
+  {% debug %}
+  ```
+
+  **Example:**
+  ```django
+  <pre>
+      {% debug %}
+  </pre>
+  ```
+
+  **Notes:**
+  - Only works when `DEBUG = True`
+  - Shows all context variables and their values
+  - Shows loaded Python modules
+</Accordion>
+
+<Accordion title="{% comment %}">
+  Ignore everything between opening and closing tags.
+
+  **Syntax:**
+  ```django
+  {% comment %}
+      This won't be rendered
+  {% endcomment %}
+
+  {% comment "Optional note" %}
+      Commented out code
+  {% endcomment %}
+  ```
+
+  **Example:**
+  ```django
+  {% comment %}
+      <p>TODO: Implement this feature</p>
+      {% for item in items %}
+          {{ item }}
+      {% endfor %}
+  {% endcomment %}
+  ```
+
+  **Alternative:**
+  ```django
+  {# Single line comment #}
+  ```
+</Accordion>
+
+<Accordion title="{% templatetag %}">
+  Output template tag characters literally.
+
+  **Syntax:**
+  ```django
+  {% templatetag tag_type %}
+  ```
+
+  **Tag types:**
+  - `openblock` - `{%`
+  - `closeblock` - `%}`
+  - `openvariable` - `{{`
+  - `closevariable` - `}}`
+  - `openbrace` - `{`
+  - `closebrace` - `}`
+  - `opencomment` - `{#`
+  - `closecomment` - `#}`
+
+  **Examples:**
+  ```django
+  {% templatetag openvariable %} variable {% templatetag closevariable %}
+  {# Output: {{ variable }} #}
+
+  To display a variable, use {% templatetag openvariable %} var {% templatetag closevariable %}
+  ```
+</Accordion>
+
+## Partials (New in Django 5.0+)
+
+<Accordion title="{% partialdef %}">
+  Define a reusable partial within a template.
+
+  **Syntax:**
+  ```django
+  {% partialdef partial_name %}
+      content
+  {% endpartialdef %}
+
+  {% partialdef partial_name inline %}
+      content
+  {% endpartialdef %}
+  ```
+
+  **Examples:**
+  ```django
+  {# Define a partial #}
+  {% partialdef card_header %}
+      <div class="card-header">
+          <h3>{{ title }}</h3>
+      </div>
+  {% endpartialdef %}
+
+  {# Define and render inline #}
+  {% partialdef greeting inline %}
+      Hello, {{ name }}!
+  {% endpartialdef %}
+  ```
+
+  **Notes:**
+  - Use `inline` to render the partial at definition point
+  - Partial names must be unique per template
+</Accordion>
+
+<Accordion title="{% partial %}">
+  Render a previously defined partial.
+
+  **Syntax:**
+  ```django
+  {% partial partial_name %}
+  ```
+
+  **Example:**
+  ```django
+  {% partialdef user_badge %}
+      <span class="badge">{{ user.username }}</span>
+  {% endpartialdef %}
+
+  {# Use the partial multiple times #}
+  {% for user in users %}
+      {% partial user_badge %}
+  {% endfor %}
+  ```
+
+  **Accessing from templates:**
+  ```python
+  # Load a partial from a template
+  from django.template import Engine
+  engine = Engine.get_default()
+  partial = engine.get_template('template.html#partial_name')
+  ```
+</Accordion>
+
+## Related
+
+- [Built-in Filters](/api/templates/built-in-filters)
+- [Template Engine](/api/templates/engine)
+- [Context Processors](/api/templates/context-processors)

@@ -1,0 +1,509 @@
+---
+title: Settings
+description: Django settings configuration reference
+---
+
+Django settings control your project's configuration. Settings are defined in your project's `settings.py` file.
+
+## Core Settings
+
+### DEBUG
+
+```python
+DEBUG = False
+```
+
+Enables debug mode. When `True`, Django displays detailed error pages with stack traces.
+
+<Note>
+Never deploy a site with `DEBUG = True` in production. It exposes sensitive information and impacts performance.
+</Note>
+
+### SECRET_KEY
+
+```python
+SECRET_KEY = ""
+```
+
+A secret key used for cryptographic signing. Must be unique and kept secret.
+
+<ParamField path="SECRET_KEY" type="string" required>
+  A unique, unpredictable value used for security-related operations.
+</ParamField>
+
+<ParamField path="SECRET_KEY_FALLBACKS" type="list">
+  List of secret keys used to verify signatures during key rotation.
+</ParamField>
+
+### ALLOWED_HOSTS
+
+```python
+ALLOWED_HOSTS = []
+```
+
+List of host/domain names that Django can serve. Required when `DEBUG = False`.
+
+<ParamField path="ALLOWED_HOSTS" type="list" required>
+  List of strings representing host/domain names. Use `"*"` to match anything, or `".example.com"` for subdomains.
+</ParamField>
+
+## Database Settings
+
+### DATABASES
+
+```python
+DATABASES = {}
+```
+
+Database connection configuration. If left empty, defaults to the dummy backend.
+
+<ParamField path="DATABASES" type="dict" required>
+  Dictionary mapping database aliases to connection settings.
+</ParamField>
+
+```python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mydatabase',
+        'USER': 'mydatabaseuser',
+        'PASSWORD': 'mypassword',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
+    }
+}
+```
+
+<ParamField path="DATABASE_ROUTERS" type="list">
+  List of classes used to implement database routing behavior.
+</ParamField>
+
+<ParamField path="DEFAULT_AUTO_FIELD" type="string">
+  Default primary key field type.
+  
+  Default: `"django.db.models.BigAutoField"`
+</ParamField>
+
+## Application Settings
+
+### INSTALLED_APPS
+
+```python
+INSTALLED_APPS = []
+```
+
+List of strings representing installed Django applications.
+
+<ParamField path="INSTALLED_APPS" type="list" required>
+  List of application names or `AppConfig` paths.
+</ParamField>
+
+```python
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'myapp',
+]
+```
+
+### MIDDLEWARE
+
+```python
+MIDDLEWARE = []
+```
+
+List of middleware classes to use. Order is important: applied in order during request phase, reverse order during response phase.
+
+<ParamField path="MIDDLEWARE" type="list">
+  List of middleware class paths.
+</ParamField>
+
+```python
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+```
+
+## Internationalization & Localization
+
+<ParamField path="LANGUAGE_CODE" type="string">
+  Language code for this installation.
+  
+  Default: `"en-us"`
+</ParamField>
+
+<ParamField path="TIME_ZONE" type="string">
+  Time zone for this installation. When `USE_TZ = True`, this is the default user time zone.
+  
+  Default: `"America/Chicago"`
+</ParamField>
+
+<ParamField path="USE_TZ" type="bool">
+  Enable timezone-aware datetimes.
+  
+  Default: `True`
+</ParamField>
+
+<ParamField path="USE_I18N" type="bool">
+  Enable internationalization machinery.
+  
+  Default: `True`
+</ParamField>
+
+<ParamField path="LOCALE_PATHS" type="list">
+  List of directories to search for translation files.
+  
+  Default: `[]`
+</ParamField>
+
+## Static Files
+
+<ParamField path="STATIC_URL" type="string">
+  URL that handles static files served from `STATIC_ROOT`.
+  
+  Example: `"/static/"` or `"http://static.example.com/"`
+</ParamField>
+
+<ParamField path="STATIC_ROOT" type="string">
+  Absolute path to the directory where static files are collected.
+  
+  Example: `"/var/www/example.com/static/"`
+</ParamField>
+
+<ParamField path="STATICFILES_DIRS" type="list">
+  List of additional locations for static files.
+  
+  Default: `[]`
+</ParamField>
+
+<ParamField path="STATICFILES_FINDERS" type="list">
+  List of finder classes that know how to find static files.
+  
+  Default:
+  ```python
+  [
+      "django.contrib.staticfiles.finders.FileSystemFinder",
+      "django.contrib.staticfiles.finders.AppDirectoriesFinder",
+  ]
+  ```
+</ParamField>
+
+## Media Files
+
+<ParamField path="MEDIA_ROOT" type="string">
+  Absolute filesystem path to the directory for user-uploaded files.
+  
+  Example: `"/var/www/example.com/media/"`
+</ParamField>
+
+<ParamField path="MEDIA_URL" type="string">
+  URL that handles media served from `MEDIA_ROOT`.
+  
+  Example: `"/media/"` or `"http://media.example.com/"`
+</ParamField>
+
+## Templates
+
+<ParamField path="TEMPLATES" type="list">
+  List of template engine configurations.
+  
+  Default: `[]`
+</ParamField>
+
+```python
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+```
+
+## Authentication
+
+<ParamField path="AUTH_USER_MODEL" type="string">
+  The model to use for user authentication.
+  
+  Default: `"auth.User"`
+</ParamField>
+
+<ParamField path="AUTHENTICATION_BACKENDS" type="list">
+  List of authentication backend classes.
+  
+  Default: `["django.contrib.auth.backends.ModelBackend"]`
+</ParamField>
+
+<ParamField path="LOGIN_URL" type="string">
+  URL where requests are redirected for login.
+  
+  Default: `"/accounts/login/"`
+</ParamField>
+
+<ParamField path="LOGIN_REDIRECT_URL" type="string">
+  URL where requests are redirected after login.
+  
+  Default: `"/accounts/profile/"`
+</ParamField>
+
+<ParamField path="LOGOUT_REDIRECT_URL" type="string">
+  URL where requests are redirected after logout.
+  
+  Default: `None`
+</ParamField>
+
+<ParamField path="PASSWORD_RESET_TIMEOUT" type="int">
+  Number of seconds a password reset link is valid.
+  
+  Default: `259200` (3 days)
+</ParamField>
+
+<ParamField path="PASSWORD_HASHERS" type="list">
+  List of password hasher classes. The first hasher is the preferred algorithm.
+  
+  Default:
+  ```python
+  [
+      "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+      "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+      "django.contrib.auth.hashers.Argon2PasswordHasher",
+      "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+      "django.contrib.auth.hashers.ScryptPasswordHasher",
+  ]
+  ```
+</ParamField>
+
+## Sessions
+
+<ParamField path="SESSION_ENGINE" type="string">
+  Module to store session data.
+  
+  Default: `"django.contrib.sessions.backends.db"`
+</ParamField>
+
+<ParamField path="SESSION_COOKIE_NAME" type="string">
+  Name of the session cookie.
+  
+  Default: `"sessionid"`
+</ParamField>
+
+<ParamField path="SESSION_COOKIE_AGE" type="int">
+  Age of session cookie in seconds.
+  
+  Default: `1209600` (2 weeks)
+</ParamField>
+
+<ParamField path="SESSION_COOKIE_SECURE" type="bool">
+  Whether the session cookie should be secure (HTTPS only).
+  
+  Default: `False`
+</ParamField>
+
+<ParamField path="SESSION_COOKIE_HTTPONLY" type="bool">
+  Whether to use HttpOnly flag on session cookie.
+  
+  Default: `True`
+</ParamField>
+
+<ParamField path="SESSION_COOKIE_SAMESITE" type="string">
+  Value of SameSite flag on session cookie.
+  
+  Default: `"Lax"`
+</ParamField>
+
+## CSRF Protection
+
+<ParamField path="CSRF_COOKIE_NAME" type="string">
+  Name of the CSRF cookie.
+  
+  Default: `"csrftoken"`
+</ParamField>
+
+<ParamField path="CSRF_COOKIE_SECURE" type="bool">
+  Whether CSRF cookie should be secure (HTTPS only).
+  
+  Default: `False`
+</ParamField>
+
+<ParamField path="CSRF_TRUSTED_ORIGINS" type="list">
+  List of trusted origins for unsafe requests.
+  
+  Default: `[]`
+</ParamField>
+
+<ParamField path="CSRF_USE_SESSIONS" type="bool">
+  Whether to store CSRF token in session instead of cookie.
+  
+  Default: `False`
+</ParamField>
+
+## Caching
+
+<ParamField path="CACHES" type="dict">
+  Dictionary of cache backend configurations.
+  
+  Default:
+  ```python
+  {
+      "default": {
+          "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+      }
+  }
+  ```
+</ParamField>
+
+## Email
+
+<ParamField path="EMAIL_BACKEND" type="string">
+  Backend to use for sending email.
+  
+  Default: `"django.core.mail.backends.smtp.EmailBackend"`
+</ParamField>
+
+<ParamField path="EMAIL_HOST" type="string">
+  Host for sending email.
+  
+  Default: `"localhost"`
+</ParamField>
+
+<ParamField path="EMAIL_PORT" type="int">
+  Port for sending email.
+  
+  Default: `25`
+</ParamField>
+
+<ParamField path="EMAIL_HOST_USER" type="string">
+  Username for SMTP authentication.
+  
+  Default: `""`
+</ParamField>
+
+<ParamField path="EMAIL_HOST_PASSWORD" type="string">
+  Password for SMTP authentication.
+  
+  Default: `""`
+</ParamField>
+
+<ParamField path="EMAIL_USE_TLS" type="bool">
+  Whether to use TLS connection.
+  
+  Default: `False`
+</ParamField>
+
+<ParamField path="EMAIL_USE_SSL" type="bool">
+  Whether to use SSL connection.
+  
+  Default: `False`
+</ParamField>
+
+<ParamField path="DEFAULT_FROM_EMAIL" type="string">
+  Default email address for automated correspondence.
+  
+  Default: `"webmaster@localhost"`
+</ParamField>
+
+## File Uploads
+
+<ParamField path="FILE_UPLOAD_MAX_MEMORY_SIZE" type="int">
+  Maximum size in bytes before streaming to file system.
+  
+  Default: `2621440` (2.5 MB)
+</ParamField>
+
+<ParamField path="DATA_UPLOAD_MAX_MEMORY_SIZE" type="int">
+  Maximum size in bytes of request data (excluding file uploads).
+  
+  Default: `2621440` (2.5 MB)
+</ParamField>
+
+<ParamField path="DATA_UPLOAD_MAX_NUMBER_FIELDS" type="int">
+  Maximum number of GET/POST parameters.
+  
+  Default: `1000`
+</ParamField>
+
+<ParamField path="DATA_UPLOAD_MAX_NUMBER_FILES" type="int">
+  Maximum number of files in multipart upload.
+  
+  Default: `100`
+</ParamField>
+
+<ParamField path="FILE_UPLOAD_PERMISSIONS" type="int">
+  Numeric mode for newly-uploaded files.
+  
+  Default: `0o644`
+</ParamField>
+
+## Security
+
+<ParamField path="SECURE_SSL_REDIRECT" type="bool">
+  Whether to redirect all HTTP requests to HTTPS.
+  
+  Default: `False`
+</ParamField>
+
+<ParamField path="SECURE_HSTS_SECONDS" type="int">
+  HTTP Strict Transport Security header value in seconds.
+  
+  Default: `0`
+</ParamField>
+
+<ParamField path="SECURE_CONTENT_TYPE_NOSNIFF" type="bool">
+  Whether to set X-Content-Type-Options: nosniff header.
+  
+  Default: `True`
+</ParamField>
+
+<ParamField path="X_FRAME_OPTIONS" type="string">
+  Default X-Frame-Options header value.
+  
+  Default: `"DENY"`
+</ParamField>
+
+## Logging
+
+<ParamField path="LOGGING" type="dict">
+  Custom logging configuration dictionary.
+  
+  Default: `{}`
+</ParamField>
+
+<ParamField path="LOGGING_CONFIG" type="string">
+  Callable to configure logging.
+  
+  Default: `"logging.config.dictConfig"`
+</ParamField>
+
+## Testing
+
+<ParamField path="TEST_RUNNER" type="string">
+  Class to use to run the test suite.
+  
+  Default: `"django.test.runner.DiscoverRunner"`
+</ParamField>
+
+## Migrations
+
+<ParamField path="MIGRATION_MODULES" type="dict">
+  Migration module overrides for apps, by app label.
+  
+  Default: `{}`
+</ParamField>

@@ -1,0 +1,553 @@
+---
+title: Sitemaps
+description: Generate XML sitemaps for search engine optimization
+---
+
+The sitemaps framework generates XML sitemaps to help search engines index your site. It's defined in `django.contrib.sitemaps`.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.sites',  # Required
+    'django.contrib.sitemaps',
+]
+
+SITE_ID = 1
+```
+
+Configure your site:
+
+```python
+# In Django shell or fixture
+from django.contrib.sites.models import Site
+
+site = Site.objects.get_current()
+site.domain = 'example.com'
+site.name = 'My Site'
+site.save()
+```
+
+## Basic Sitemap
+
+Create a sitemap class from `django.contrib.sitemaps.Sitemap`:
+
+```python sitemaps.py
+from django.contrib.sitemaps import Sitemap
+from .models import Article
+
+class ArticleSitemap(Sitemap):
+    changefreq = "weekly"
+    priority = 0.8
+    
+    def items(self):
+        return Article.objects.filter(status='published')
+    
+    def lastmod(self, obj):
+        return obj.updated_date
+```
+
+## URL Configuration
+
+```python urls.py
+from django.contrib.sitemaps.views import sitemap
+from django.urls import path
+from .sitemaps import ArticleSitemap
+
+sitemaps = {
+    'articles': ArticleSitemap,
+}
+
+urlpatterns = [
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
+]
+```
+
+Access the sitemap at `/sitemap.xml`.
+
+## Sitemap Attributes
+
+From `django.contrib.sitemaps.Sitemap`:
+
+```python sitemaps.py
+from django.contrib.sitemaps import Sitemap
+
+class ArticleSitemap(Sitemap):
+    # Change frequency: 'always', 'hourly', 'daily', 'weekly', 
+    # 'monthly', 'yearly', 'never'
+    changefreq = "daily"
+    
+    # Priority: 0.0 to 1.0
+    priority = 0.9
+    
+    # Protocol: 'http' or 'https' (None = use request protocol)
+    protocol = 'https'
+    
+    # Limit items per sitemap page (max 50,000)
+    limit = 50000
+    
+    def items(self):
+        return Article.objects.published()
+    
+    def location(self, obj):
+        # Default: calls obj.get_absolute_url()
+        return f'/articles/{obj.slug}/'
+    
+    def lastmod(self, obj):
+        # Return datetime of last modification
+        return obj.updated_date
+    
+    def changefreq(self, obj):
+        # Can be dynamic per item
+        if obj.is_breaking_news:
+            return 'hourly'
+        return 'daily'
+    
+    def priority(self, obj):
+        # Can be dynamic per item
+        if obj.featured:
+            return 1.0
+        return 0.7
+```
+
+## Multiple Sitemaps
+
+```python sitemaps.py
+from django.contrib.sitemaps import Sitemap
+from .models import Article, Category, Page
+
+class ArticleSitemap(Sitemap):
+    changefreq = "daily"
+    priority = 0.8
+    
+    def items(self):
+        return Article.objects.published()
+    
+    def lastmod(self, obj):
+        return obj.updated_date
+
+class CategorySitemap(Sitemap):
+    changefreq = "weekly"
+    priority = 0.6
+    
+    def items(self):
+        return Category.objects.all()
+    
+    def lastmod(self, obj):
+        # Get latest article in category
+        latest = obj.articles.published().first()
+        return latest.updated_date if latest else None
+
+class StaticPageSitemap(Sitemap):
+    changefreq = "monthly"
+    priority = 0.5
+    
+    def items(self):
+        return Page.objects.filter(published=True)
+```
+
+```python urls.py
+from django.contrib.sitemaps.views import sitemap
+from .sitemaps import ArticleSitemap, CategorySitemap, StaticPageSitemap
+
+sitemaps = {
+    'articles': ArticleSitemap,
+    'categories': CategorySitemap,
+    'pages': StaticPageSitemap,
+}
+
+urlpatterns = [
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
+]
+```
+
+## Generic Sitemap
+
+For simple models, use `GenericSitemap`:
+
+```python urls.py
+from django.contrib.sitemaps import GenericSitemap
+from django.contrib.sitemaps.views import sitemap
+from .models import Article
+
+info_dict = {
+    'queryset': Article.objects.published(),
+    'date_field': 'updated_date',
+}
+
+sitemaps = {
+    'articles': GenericSitemap(info_dict, priority=0.8, changefreq='daily'),
+}
+
+urlpatterns = [
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}),
+]
+```
+
+## Sitemap Index
+
+For large sites with multiple sitemaps:
+
+```python urls.py
+from django.contrib.sitemaps.views import index, sitemap
+from .sitemaps import ArticleSitemap, CategorySitemap
+
+sitemaps = {
+    'articles': ArticleSitemap,
+    'categories': CategorySitemap,
+}
+
+urlpatterns = [
+    # Sitemap index
+    path('sitemap.xml', index, {'sitemaps': sitemaps}),
+    
+    # Individual sitemaps
+    path(
+        'sitemap-<section>.xml',
+        sitemap,
+        {'sitemaps': sitemaps},
+        name='django.contrib.sitemaps.views.sitemap'
+    ),
+]
+```
+
+## Internationalization
+
+Generate sitemaps for multiple languages:
+
+```python sitemaps.py
+from django.contrib.sitemaps import Sitemap
+from django.urls import reverse
+
+class ArticleSitemap(Sitemap):
+    changefreq = "weekly"
+    priority = 0.8
+    i18n = True  # Enable i18n
+    
+    def items(self):
+        return Article.objects.published()
+    
+    def location(self, obj):
+        return reverse('article_detail', args=[obj.slug])
+```
+
+With alternate language links:
+
+```python sitemaps.py
+class ArticleSitemap(Sitemap):
+    i18n = True
+    alternates = True  # Include alternate language links
+    
+    def items(self):
+        return Article.objects.published()
+```
+
+### Custom Languages
+
+```python sitemaps.py
+class ArticleSitemap(Sitemap):
+    i18n = True
+    languages = ['en', 'es', 'fr']  # Only these languages
+    
+    def items(self):
+        return Article.objects.published()
+```
+
+## Pagination
+
+Sitemaps are automatically paginated (50,000 items per page):
+
+```python sitemaps.py
+class ArticleSitemap(Sitemap):
+    limit = 10000  # Custom limit per page
+    
+    def items(self):
+        return Article.objects.published()
+```
+
+## Custom Location
+
+```python sitemaps.py
+class ArticleSitemap(Sitemap):
+    def items(self):
+        return Article.objects.published()
+    
+    def location(self, item):
+        # Custom URL generation
+        return f'/blog/{item.published_date.year}/{item.slug}/'
+```
+
+## Static URLs
+
+Include static URLs in sitemap:
+
+```python sitemaps.py
+from django.contrib.sitemaps import Sitemap
+from django.urls import reverse
+
+class StaticViewSitemap(Sitemap):
+    priority = 0.5
+    changefreq = 'monthly'
+    
+    def items(self):
+        return ['home', 'about', 'contact', 'privacy', 'terms']
+    
+    def location(self, item):
+        return reverse(item)
+```
+
+## Dynamic Priority and Changefreq
+
+```python sitemaps.py
+from datetime import timedelta
+from django.utils import timezone
+
+class ArticleSitemap(Sitemap):
+    def items(self):
+        return Article.objects.published()
+    
+    def lastmod(self, obj):
+        return obj.updated_date
+    
+    def changefreq(self, obj):
+        # More recent articles change more frequently
+        age = timezone.now() - obj.published_date
+        if age < timedelta(days=7):
+            return 'daily'
+        elif age < timedelta(days=30):
+            return 'weekly'
+        else:
+            return 'monthly'
+    
+    def priority(self, obj):
+        # Featured articles get higher priority
+        if obj.featured:
+            return 1.0
+        elif obj.view_count > 1000:
+            return 0.9
+        elif obj.view_count > 100:
+            return 0.7
+        else:
+            return 0.5
+```
+
+## Caching Sitemaps
+
+```python urls.py
+from django.views.decorators.cache import cache_page
+from django.contrib.sitemaps.views import sitemap
+
+# Cache for 1 hour
+sitemap_view = cache_page(60 * 60)(sitemap)
+
+urlpatterns = [
+    path('sitemap.xml', sitemap_view, {'sitemaps': sitemaps}),
+]
+```
+
+## robots.txt Integration
+
+```python views.py
+from django.http import HttpResponse
+from django.views.decorators.http import require_GET
+
+@require_GET
+def robots_txt(request):
+    lines = [
+        "User-agent: *",
+        "Disallow: /admin/",
+        "Disallow: /private/",
+        "",
+        f"Sitemap: {request.scheme}://{request.get_host()}/sitemap.xml",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/plain")
+```
+
+```python urls.py
+urlpatterns = [
+    path('robots.txt', robots_txt),
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}),
+]
+```
+
+## Complete Example
+
+```python sitemaps.py
+from django.contrib.sitemaps import Sitemap
+from django.urls import reverse
+from .models import Article, Category, Page
+
+class ArticleSitemap(Sitemap):
+    changefreq = "weekly"
+    priority = 0.8
+    protocol = 'https'
+    
+    def items(self):
+        return Article.objects.filter(
+            status='published'
+        ).select_related('author', 'category')
+    
+    def lastmod(self, obj):
+        return obj.updated_date
+    
+    def priority(self, obj):
+        if obj.featured:
+            return 1.0
+        return 0.8
+
+class CategorySitemap(Sitemap):
+    changefreq = "weekly"
+    priority = 0.6
+    protocol = 'https'
+    
+    def items(self):
+        return Category.objects.annotate(
+            latest_update=Max('articles__updated_date')
+        )
+    
+    def lastmod(self, obj):
+        return obj.latest_update
+
+class StaticSitemap(Sitemap):
+    changefreq = "monthly"
+    priority = 0.5
+    protocol = 'https'
+    
+    def items(self):
+        return ['home', 'about', 'contact']
+    
+    def location(self, item):
+        return reverse(item)
+```
+
+```python urls.py
+from django.contrib.sitemaps.views import sitemap
+from django.urls import path
+from .sitemaps import ArticleSitemap, CategorySitemap, StaticSitemap
+
+sitemaps = {
+    'articles': ArticleSitemap,
+    'categories': CategorySitemap,
+    'static': StaticSitemap,
+}
+
+urlpatterns = [
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
+]
+```
+
+## Testing Sitemaps
+
+```python tests.py
+from django.test import TestCase
+from django.urls import reverse
+from .models import Article
+import xml.etree.ElementTree as ET
+
+class SitemapTest(TestCase):
+    def setUp(self):
+        self.article = Article.objects.create(
+            title='Test Article',
+            slug='test-article',
+            status='published'
+        )
+    
+    def test_sitemap_renders(self):
+        response = self.client.get('/sitemap.xml')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Type'],
+            'application/xml'
+        )
+    
+    def test_sitemap_contains_article(self):
+        response = self.client.get('/sitemap.xml')
+        
+        # Parse XML
+        root = ET.fromstring(response.content)
+        namespace = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+        
+        urls = root.findall('.//ns:url', namespace)
+        self.assertTrue(len(urls) > 0)
+        
+        # Check article is in sitemap
+        locs = [url.find('ns:loc', namespace).text for url in urls]
+        article_url = f'http://testserver{self.article.get_absolute_url()}'
+        self.assertIn(article_url, locs)
+```
+
+## Submit to Search Engines
+
+### Google Search Console
+
+1. Add your sitemap URL: `https://example.com/sitemap.xml`
+2. Google will automatically crawl it periodically
+
+### Ping Search Engines
+
+```python
+import requests
+from django.contrib.sites.models import Site
+
+def ping_google():
+    site = Site.objects.get_current()
+    sitemap_url = f'https://{site.domain}/sitemap.xml'
+    ping_url = f'https://www.google.com/ping?sitemap={sitemap_url}'
+    requests.get(ping_url)
+
+def ping_bing():
+    site = Site.objects.get_current()
+    sitemap_url = f'https://{site.domain}/sitemap.xml'
+    ping_url = f'https://www.bing.com/ping?sitemap={sitemap_url}'
+    requests.get(ping_url)
+```
+
+## Best Practices
+
+### Optimize Queries
+
+```python
+def items(self):
+    # Use select_related/prefetch_related
+    return Article.objects.select_related('author').published()
+```
+
+### Set Reasonable Limits
+
+```python
+class ArticleSitemap(Sitemap):
+    limit = 10000  # Don't put too many URLs in one sitemap
+```
+
+### Use Last Modified
+
+```python
+def lastmod(self, obj):
+    # Always provide lastmod when possible
+    return obj.updated_date
+```
+
+### Cache Appropriately
+
+```python
+# Cache sitemaps, but not for too long
+sitemap_view = cache_page(60 * 30)(sitemap)  # 30 minutes
+```
+
+## Key Classes Reference
+
+### Sitemap
+
+Location: `django.contrib.sitemaps.Sitemap`
+
+Base class for creating sitemaps.
+
+### GenericSitemap
+
+Location: `django.contrib.sitemaps.GenericSitemap`
+
+Convenience class for simple model-based sitemaps.
+
+<Note>
+Sitemaps should only include publicly accessible URLs. Don't include pages that require authentication or have noindex meta tags.
+</Note>

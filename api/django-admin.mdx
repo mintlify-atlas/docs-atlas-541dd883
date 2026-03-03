@@ -1,0 +1,378 @@
+---
+title: django-admin Commands
+description: Command-line utility for Django administrative tasks
+---
+
+The `django-admin` utility provides commands for common Django administrative tasks. When using `manage.py`, the commands are the same.
+
+## Project & App Creation
+
+### startproject
+
+Creates a Django project directory structure for the given project name.
+
+```bash
+django-admin startproject myproject
+django-admin startproject myproject /path/to/destination
+```
+
+<ParamField path="name" type="string" required>
+  Name of the project to create.
+</ParamField>
+
+<ParamField path="directory" type="string">
+  Optional destination directory. Will be created if it doesn't exist.
+</ParamField>
+
+<ParamField path="--template" type="string">
+  Path or URL to load the template from.
+</ParamField>
+
+<ParamField path="--extension" type="string">
+  File extension(s) to render (default: "py"). Separate multiple extensions with commas, or use `-e` multiple times.
+</ParamField>
+
+<ParamField path="--name" type="string">
+  File name(s) to render. Separate multiple names with commas, or use `-n` multiple times.
+</ParamField>
+
+<ParamField path="--exclude" type="string">
+  Directory name(s) to exclude, in addition to .git and __pycache__.
+</ParamField>
+
+<Note>
+The project name should be a valid Python identifier (no hyphens, must not conflict with Python or Django package names).
+</Note>
+
+### startapp
+
+Creates a Django app directory structure for the given app name.
+
+```bash
+python manage.py startapp myapp
+python manage.py startapp myapp /path/to/destination
+```
+
+<ParamField path="name" type="string" required>
+  Name of the application to create.
+</ParamField>
+
+<ParamField path="directory" type="string">
+  Optional destination directory. Will be created if it doesn't exist.
+</ParamField>
+
+<ParamField path="--template" type="string">
+  Path or URL to load the template from.
+</ParamField>
+
+<ParamField path="--extension" type="string">
+  File extension(s) to render (default: "py").
+</ParamField>
+
+<ParamField path="--name" type="string">
+  File name(s) to render.
+</ParamField>
+
+## Database Migrations
+
+### makemigrations
+
+Creates new migration files based on model changes.
+
+```bash
+python manage.py makemigrations
+python manage.py makemigrations myapp
+python manage.py makemigrations --dry-run
+python manage.py makemigrations --name custom_migration_name
+```
+
+<ParamField path="app_label" type="string">
+  Specify app label(s) to create migrations for. If omitted, creates migrations for all apps.
+</ParamField>
+
+<ParamField path="--dry-run" type="bool">
+  Show what migrations would be made without actually writing them.
+</ParamField>
+
+<ParamField path="--merge" type="bool">
+  Enable fixing of migration conflicts.
+</ParamField>
+
+<ParamField path="--empty" type="bool">
+  Create an empty migration.
+</ParamField>
+
+<ParamField path="--noinput" type="bool">
+  Tells Django NOT to prompt for input.
+</ParamField>
+
+<ParamField path="--name" type="string">
+  Use this name for migration file(s).
+</ParamField>
+
+<ParamField path="--check" type="bool">
+  Exit with non-zero status if model changes are missing migrations. Implies --dry-run.
+</ParamField>
+
+<ParamField path="--scriptable" type="bool">
+  Divert log output to stderr, writing only migration file paths to stdout.
+</ParamField>
+
+<ParamField path="--update" type="bool">
+  Merge model changes into the latest migration and optimize operations.
+</ParamField>
+
+### migrate
+
+Applies and unapplies migrations to synchronize the database schema with models.
+
+```bash
+python manage.py migrate
+python manage.py migrate myapp
+python manage.py migrate myapp 0001_initial
+python manage.py migrate myapp zero
+```
+
+<ParamField path="app_label" type="string">
+  App label to synchronize the state for.
+</ParamField>
+
+<ParamField path="migration_name" type="string">
+  Migrate to this specific migration. Use "zero" to unapply all migrations.
+</ParamField>
+
+<ParamField path="--database" type="string">
+  Nominates a database to synchronize. Defaults to "default".
+</ParamField>
+
+<ParamField path="--fake" type="bool">
+  Mark migrations as run without actually running them.
+</ParamField>
+
+<ParamField path="--fake-initial" type="bool">
+  Detect if tables already exist and fake-apply initial migrations if so.
+</ParamField>
+
+<ParamField path="--plan" type="bool">
+  Shows a list of migration actions that will be performed.
+</ParamField>
+
+<ParamField path="--run-syncdb" type="bool">
+  Creates tables for apps without migrations.
+</ParamField>
+
+<ParamField path="--noinput" type="bool">
+  Tells Django NOT to prompt for input.
+</ParamField>
+
+<ParamField path="--check" type="bool">
+  Exit with non-zero status if unapplied migrations exist. Does not apply migrations.
+</ParamField>
+
+<ParamField path="--prune" type="bool">
+  Delete nonexistent migrations from the django_migrations table.
+</ParamField>
+
+<Note>
+Always backup your database before running migrations in production.
+</Note>
+
+## Development Server
+
+### runserver
+
+Starts a lightweight development web server.
+
+```bash
+python manage.py runserver
+python manage.py runserver 8080
+python manage.py runserver 0.0.0.0:8000
+python manage.py runserver --noreload
+```
+
+<ParamField path="addrport" type="string">
+  Optional port number or ipaddr:port. Default is 127.0.0.1:8000.
+</ParamField>
+
+<ParamField path="--ipv6" type="bool">
+  Tells Django to use an IPv6 address.
+</ParamField>
+
+<ParamField path="--nothreading" type="bool">
+  Tells Django NOT to use threading.
+</ParamField>
+
+<ParamField path="--noreload" type="bool">
+  Tells Django NOT to use the auto-reloader.
+</ParamField>
+
+<Note>
+DO NOT use this server in production. It's designed for development only and hasn't been audited for security or performance.
+</Note>
+
+## Interactive Shell
+
+### shell
+
+Runs a Python interactive interpreter with Django environment loaded.
+
+```bash
+python manage.py shell
+python manage.py shell --interface ipython
+python manage.py shell -c "from myapp.models import MyModel; print(MyModel.objects.count())"
+```
+
+<ParamField path="--interface" type="string">
+  Specify an interactive interpreter interface: "ipython", "bpython", or "python".
+</ParamField>
+
+<ParamField path="--no-startup" type="bool">
+  When using plain Python, ignore PYTHONSTARTUP environment variable and ~/.pythonrc.py script.
+</ParamField>
+
+<ParamField path="--no-imports" type="bool">
+  Disable automatic imports of models.
+</ParamField>
+
+<ParamField path="--command" type="string">
+  Instead of opening an interactive shell, run a command as Django and exit.
+</ParamField>
+
+The shell automatically imports:
+- `django.conf.settings`
+- `django.db.connection`
+- `django.db.models`
+- `django.db.models.functions`
+- `django.db.reset_queries`
+- `django.utils.timezone`
+- All models from `INSTALLED_APPS`
+
+## System Checks
+
+### check
+
+Checks the entire Django project for potential problems.
+
+```bash
+python manage.py check
+python manage.py check myapp
+python manage.py check --tag models
+python manage.py check --deploy
+```
+
+<ParamField path="app_label" type="string">
+  Check specific app(s) only.
+</ParamField>
+
+<ParamField path="--tag" type="string">
+  Run only checks labeled with given tag. Can be used multiple times.
+</ParamField>
+
+<ParamField path="--list-tags" type="bool">
+  List available tags.
+</ParamField>
+
+<ParamField path="--deploy" type="bool">
+  Check deployment settings.
+</ParamField>
+
+<ParamField path="--fail-level" type="string">
+  Message level that will cause the command to exit with non-zero status. Choices: CRITICAL, ERROR, WARNING, INFO, DEBUG. Default is ERROR.
+</ParamField>
+
+<ParamField path="--database" type="string">
+  Run database related checks against specific aliases. Can be used multiple times.
+</ParamField>
+
+## Other Useful Commands
+
+### showmigrations
+
+Shows all available migrations and which have been applied.
+
+```bash
+python manage.py showmigrations
+python manage.py showmigrations myapp
+python manage.py showmigrations --plan
+```
+
+### sqlmigrate
+
+Displays the SQL statements for a migration.
+
+```bash
+python manage.py sqlmigrate myapp 0001
+```
+
+### dbshell
+
+Runs the command-line client for the database engine specified in your settings.
+
+```bash
+python manage.py dbshell
+```
+
+### flush
+
+Removes all data from the database and re-executes any post-synchronization handlers.
+
+```bash
+python manage.py flush
+```
+
+<Note>
+This is a destructive operation. Use with caution.
+</Note>
+
+### dumpdata
+
+Outputs all data from the database (or a specific app/model) as JSON, XML, or YAML.
+
+```bash
+python manage.py dumpdata
+python manage.py dumpdata myapp
+python manage.py dumpdata myapp.MyModel
+```
+
+### loaddata
+
+Loads data from a fixture file into the database.
+
+```bash
+python manage.py loaddata fixture.json
+```
+
+### createsuperuser
+
+Creates a superuser account for the Django admin.
+
+```bash
+python manage.py createsuperuser
+```
+
+### changepassword
+
+Changes a user's password.
+
+```bash
+python manage.py changepassword username
+```
+
+### collectstatic
+
+Collects static files from all apps into `STATIC_ROOT`.
+
+```bash
+python manage.py collectstatic
+python manage.py collectstatic --noinput
+```
+
+### test
+
+Runs tests for all installed apps or specific apps.
+
+```bash
+python manage.py test
+python manage.py test myapp
+python manage.py test myapp.tests.MyTestCase
+```

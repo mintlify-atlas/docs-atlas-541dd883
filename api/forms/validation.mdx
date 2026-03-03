@@ -1,0 +1,654 @@
+---
+title: Form Validation
+description: Field validators, clean methods, and ValidationError handling
+---
+
+## ValidationError
+
+Exception raised when validation fails.
+
+```python
+from django.core.exceptions import ValidationError
+
+raise ValidationError('Invalid value')
+```
+
+### Constructor
+
+```python
+ValidationError(
+    message,
+    code=None,
+    params=None
+)
+```
+
+<ParamField path="message" type="str | list" required>
+  Error message or list of error messages.
+</ParamField>
+
+<ParamField path="code" type="str">
+  Error code for programmatic identification.
+</ParamField>
+
+<ParamField path="params" type="dict">
+  Dictionary of parameters for message interpolation.
+</ParamField>
+
+```python
+raise ValidationError(
+    'Value %(value)s is not valid',
+    code='invalid',
+    params={'value': user_input}
+)
+```
+
+---
+
+## Built-in Validators
+
+Validators are callables that raise `ValidationError` if validation fails.
+
+### RegexValidator
+
+Validates that input matches a regular expression.
+
+```python
+from django.core.validators import RegexValidator
+
+RegexValidator(
+    regex,
+    message='Enter a valid value.',
+    code='invalid',
+    inverse_match=False,
+    flags=0
+)
+```
+
+<ParamField path="regex" type="str | Pattern" required>
+  Regular expression string or compiled pattern.
+</ParamField>
+
+<ParamField path="message" type="str">
+  Custom error message.
+</ParamField>
+
+<ParamField path="code" type="str" default="invalid">
+  Error code.
+</ParamField>
+
+<ParamField path="inverse_match" type="bool" default="False">
+  If `True`, validation fails if pattern matches.
+</ParamField>
+
+<ParamField path="flags" type="int" default="0">
+  Regular expression flags (e.g., `re.IGNORECASE`).
+</ParamField>
+
+```python
+phone_validator = RegexValidator(
+    regex=r'^\+?1?\d{9,15}$',
+    message='Enter a valid phone number'
+)
+
+phone = forms.CharField(validators=[phone_validator])
+```
+
+### EmailValidator
+
+Validates email addresses.
+
+```python
+from django.core.validators import EmailValidator
+
+EmailValidator(
+    message='Enter a valid email address.',
+    code='invalid',
+    allowlist=None
+)
+```
+
+<ParamField path="allowlist" type="list">
+  List of domains to allow (bypasses normal validation for these domains).
+</ParamField>
+
+```python
+from django.core.validators import validate_email
+
+email = forms.CharField(validators=[validate_email])
+```
+
+### URLValidator
+
+Validates URLs.
+
+```python
+from django.core.validators import URLValidator
+
+URLValidator(
+    schemes=['http', 'https', 'ftp', 'ftps'],
+    message='Enter a valid URL.',
+    code='invalid'
+)
+```
+
+<ParamField path="schemes" type="list" default="['http', 'https', 'ftp', 'ftps']">
+  List of allowed URL schemes.
+</ParamField>
+
+```python
+url_validator = URLValidator(schemes=['http', 'https'])
+website = forms.CharField(validators=[url_validator])
+```
+
+### MaxValueValidator
+
+Validates that value is less than or equal to a maximum.
+
+```python
+from django.core.validators import MaxValueValidator
+
+MaxValueValidator(
+    limit_value,
+    message='Ensure this value is less than or equal to %(limit_value)s.'
+)
+```
+
+```python
+age = forms.IntegerField(
+    validators=[MaxValueValidator(120)]
+)
+```
+
+### MinValueValidator
+
+Validates that value is greater than or equal to a minimum.
+
+```python
+from django.core.validators import MinValueValidator
+
+MinValueValidator(
+    limit_value,
+    message='Ensure this value is greater than or equal to %(limit_value)s.'
+)
+```
+
+```python
+price = forms.DecimalField(
+    validators=[MinValueValidator(0)]
+)
+```
+
+### MaxLengthValidator
+
+Validates that string length is at most a maximum.
+
+```python
+from django.core.validators import MaxLengthValidator
+
+MaxLengthValidator(
+    limit_value,
+    message='Ensure this value has at most %(limit_value)d characters.'
+)
+```
+
+### MinLengthValidator
+
+Validates that string length is at least a minimum.
+
+```python
+from django.core.validators import MinLengthValidator
+
+MinLengthValidator(
+    limit_value,
+    message='Ensure this value has at least %(limit_value)d characters.'
+)
+```
+
+### StepValueValidator
+
+Validates that value is a multiple of a step size.
+
+```python
+from django.core.validators import StepValueValidator
+
+StepValueValidator(
+    limit_value,
+    message='Ensure this value is a multiple of step size %(limit_value)s.',
+    offset=None
+)
+```
+
+<ParamField path="offset" type="int | float">
+  Starting offset for step validation.
+</ParamField>
+
+```python
+# Only accept multiples of 5, starting from 0
+quantity = forms.IntegerField(
+    validators=[StepValueValidator(5)]
+)
+
+# Accept multiples of 10, starting from 5 (5, 15, 25, ...)
+offset_quantity = forms.IntegerField(
+    validators=[StepValueValidator(10, offset=5)]
+)
+```
+
+### DecimalValidator
+
+Validates decimal precision.
+
+```python
+from django.core.validators import DecimalValidator
+
+DecimalValidator(
+    max_digits,
+    decimal_places
+)
+```
+
+<ParamField path="max_digits" type="int">
+  Maximum total number of digits.
+</ParamField>
+
+<ParamField path="decimal_places" type="int">
+  Maximum number of decimal places.
+</ParamField>
+
+### FileExtensionValidator
+
+Validates file extensions.
+
+```python
+from django.core.validators import FileExtensionValidator
+
+FileExtensionValidator(
+    allowed_extensions,
+    message='File extension "%(extension)s" is not allowed.',
+    code='invalid_extension'
+)
+```
+
+<ParamField path="allowed_extensions" type="list" required>
+  List of allowed file extensions (without dots).
+</ParamField>
+
+```python
+attachment = forms.FileField(
+    validators=[
+        FileExtensionValidator(
+            allowed_extensions=['pdf', 'doc', 'docx']
+        )
+    ]
+)
+```
+
+### IP Address Validators
+
+```python
+from django.core.validators import (
+    validate_ipv4_address,
+    validate_ipv6_address,
+    validate_ipv46_address,
+)
+
+ip = forms.CharField(validators=[validate_ipv4_address])
+```
+
+### Slug Validators
+
+```python
+from django.core.validators import validate_slug, validate_unicode_slug
+
+slug = forms.CharField(validators=[validate_slug])
+unicode_slug = forms.CharField(validators=[validate_unicode_slug])
+```
+
+### ProhibitNullCharactersValidator
+
+Validates that string doesn't contain null characters.
+
+```python
+from django.core.validators import ProhibitNullCharactersValidator
+
+text = forms.CharField(
+    validators=[ProhibitNullCharactersValidator()]
+)
+```
+
+---
+
+## Custom Validators
+
+Create custom validators as functions or classes.
+
+### Function Validator
+
+```python
+def validate_even(value):
+    if value % 2 != 0:
+        raise ValidationError(
+            '%(value)s is not an even number',
+            code='not_even',
+            params={'value': value}
+        )
+
+even_number = forms.IntegerField(validators=[validate_even])
+```
+
+### Class Validator
+
+```python
+from django.utils.deconstruct import deconstructible
+
+@deconstructible
+class MultipleOfValidator:
+    message = 'Value must be a multiple of %(multiple)s'
+    code = 'not_multiple'
+    
+    def __init__(self, multiple, message=None):
+        self.multiple = multiple
+        if message:
+            self.message = message
+    
+    def __call__(self, value):
+        if value % self.multiple != 0:
+            raise ValidationError(
+                self.message,
+                code=self.code,
+                params={'multiple': self.multiple, 'value': value}
+            )
+    
+    def __eq__(self, other):
+        return (
+            isinstance(other, self.__class__) and
+            self.multiple == other.multiple
+        )
+
+quantity = forms.IntegerField(
+    validators=[MultipleOfValidator(5)]
+)
+```
+
+---
+
+## Field Clean Methods
+
+### clean_fieldname()
+
+Define field-specific validation by adding `clean_<fieldname>()` methods to your form.
+
+```python
+class SignupForm(forms.Form):
+    username = forms.CharField(max_length=30)
+    email = forms.EmailField()
+    
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if User.objects.filter(username=username).exists():
+            raise ValidationError(
+                'Username "%(username)s" is already taken',
+                code='duplicate',
+                params={'username': username}
+            )
+        return username
+    
+    def clean_email(self):
+        email = self.cleaned_data['email']
+        if email.endswith('@tempmail.com'):
+            raise ValidationError(
+                'Temporary email addresses are not allowed',
+                code='temp_email'
+            )
+        return email
+```
+
+### Accessing Other Fields
+
+In `clean_<fieldname>()`, only the current field and previously cleaned fields are available:
+
+```python
+class RegistrationForm(forms.Form):
+    first_name = forms.CharField()
+    last_name = forms.CharField()
+    full_name = forms.CharField(required=False)
+    
+    def clean_full_name(self):
+        # first_name and last_name have already been cleaned
+        full_name = self.cleaned_data.get('full_name')
+        if not full_name:
+            first = self.cleaned_data.get('first_name', '')
+            last = self.cleaned_data.get('last_name', '')
+            full_name = f"{first} {last}".strip()
+        return full_name
+```
+
+---
+
+## Form-wide Clean Method
+
+Use `clean()` for cross-field validation.
+
+```python
+class EventForm(forms.Form):
+    start_date = forms.DateField()
+    end_date = forms.DateField()
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start = cleaned_data.get('start_date')
+        end = cleaned_data.get('end_date')
+        
+        if start and end and start > end:
+            raise ValidationError(
+                'End date must be after start date',
+                code='invalid_date_range'
+            )
+        
+        return cleaned_data
+```
+
+### Adding Field-Specific Errors in clean()
+
+Use `add_error()` to attach errors to specific fields:
+
+```python
+def clean(self):
+    cleaned_data = super().clean()
+    password = cleaned_data.get('password')
+    confirm = cleaned_data.get('confirm_password')
+    
+    if password != confirm:
+        self.add_error('confirm_password', 'Passwords do not match')
+    
+    return cleaned_data
+```
+
+### Non-Field Errors
+
+Raise errors not tied to a specific field:
+
+```python
+def clean(self):
+    cleaned_data = super().clean()
+    # Validation logic...
+    
+    if some_condition:
+        raise ValidationError(
+            'General form error not tied to a field',
+            code='general_error'
+        )
+    
+    return cleaned_data
+```
+
+Access in template:
+
+```html
+{% if form.non_field_errors %}
+  <div class="errors">
+    {{ form.non_field_errors }}
+  </div>
+{% endif %}
+```
+
+---
+
+## Validation Lifecycle
+
+Validation occurs in this order when `is_valid()` is called:
+
+1. **Field.to_python()** - Convert raw value to Python type
+2. **Field.validate()** - Basic field validation
+3. **Field.run_validators()** - Run all attached validators
+4. **Form.clean_fieldname()** - Field-specific form cleaning
+5. **Form.clean()** - Form-wide validation
+6. **Form._post_clean()** - Post-validation hook (ModelForm uses this)
+
+```python
+# Validation flow example
+form = MyForm(request.POST)
+
+if form.is_valid():
+    # All validation has passed
+    data = form.cleaned_data
+else:
+    # form.errors contains all validation errors
+    errors = form.errors
+```
+
+---
+
+## Error Messages
+
+### Default Error Messages
+
+Fields have default error messages for common validation failures:
+
+```python
+field = forms.CharField()
+# default_error_messages = {
+#     'required': 'This field is required.',
+# }
+```
+
+### Custom Error Messages
+
+Override error messages when defining fields:
+
+```python
+email = forms.EmailField(
+    error_messages={
+        'required': 'Please provide an email address',
+        'invalid': 'Enter a valid email address',
+    }
+)
+```
+
+### Error Message Codes
+
+Common error codes by field type:
+
+**CharField:**
+- `required` - Field is required but empty
+- `max_length` - Value exceeds max_length
+- `min_length` - Value shorter than min_length
+
+**EmailField:**
+- `invalid` - Invalid email format
+
+**IntegerField:**
+- `invalid` - Not a valid integer
+- `max_value` - Exceeds maximum value
+- `min_value` - Below minimum value
+
+**ChoiceField:**
+- `invalid_choice` - Not a valid choice
+
+**FileField:**
+- `missing` - No file submitted
+- `empty` - File is empty
+- `max_length` - Filename too long
+
+### ModelForm Error Messages
+
+Customize error messages in ModelForm Meta:
+
+```python
+class ArticleForm(forms.ModelForm):
+    class Meta:
+        model = Article
+        fields = ['title', 'content']
+        error_messages = {
+            'title': {
+                'required': 'Article must have a title',
+                'max_length': 'Title is too long',
+            },
+        }
+```
+
+---
+
+## Displaying Errors
+
+### Field Errors
+
+```html
+<form method="post">
+  {% csrf_token %}
+  {% for field in form %}
+    <div>
+      {{ field.label_tag }}
+      {{ field }}
+      {% if field.errors %}
+        <div class="errors">
+          {{ field.errors }}
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</form>
+```
+
+### All Errors
+
+```html
+{% if form.errors %}
+  <div class="form-errors">
+    {{ form.errors }}
+  </div>
+{% endif %}
+```
+
+### Error Dictionary
+
+```python
+if not form.is_valid():
+    for field, errors in form.errors.items():
+        for error in errors:
+            print(f"{field}: {error}")
+```
+
+### Error Data
+
+Access structured error data:
+
+```python
+error_dict = form.errors.as_data()
+# Returns dict of field names to lists of ValidationError objects
+
+for field, errors in error_dict.items():
+    for error in errors:
+        print(f"Field: {field}")
+        print(f"Code: {error.code}")
+        print(f"Message: {error.message}")
+```
+
+### JSON Errors
+
+```python
+import json
+error_json = form.errors.as_json()
+data = json.loads(error_json)
+```

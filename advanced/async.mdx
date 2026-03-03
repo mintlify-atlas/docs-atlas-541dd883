@@ -1,0 +1,315 @@
+---
+title: "Async Views & ASGI"
+description: "Learn how to write async views, use ASGI, and perform async ORM operations in Django"
+---
+
+## Introduction
+
+Django supports asynchronous views and middleware, allowing you to write high-performance async code. This guide covers async views, ASGI configuration, and async ORM operations.
+
+## ASGI Application
+
+Django provides ASGI (Asynchronous Server Gateway Interface) support through the `get_asgi_application()` function.
+
+### Basic ASGI Setup
+
+```python
+# asgi.py
+import django
+from django.core.handlers.asgi import ASGIHandler
+from django.core.asgi import get_asgi_application
+
+# Get the ASGI application
+application = get_asgi_application()
+```
+
+<Note>
+The `get_asgi_application()` function from `django.core.asgi` is the public interface to Django's ASGI support. It returns an ASGI 3 callable.
+</Note>
+
+### Running with ASGI Servers
+
+```bash
+# Using Uvicorn
+uvicorn myproject.asgi:application
+
+# Using Daphne
+daphne myproject.asgi:application
+
+# Using Hypercorn
+hypercorn myproject.asgi:application
+```
+
+## Async Views
+
+Django supports both async function-based views and async class-based views.
+
+### Async Function-Based Views
+
+```python
+from django.http import JsonResponse
+import asyncio
+
+async def async_view(request):
+    # Simulate async operation
+    await asyncio.sleep(1)
+    data = {"message": "Hello from async view"}
+    return JsonResponse(data)
+```
+
+### Async Class-Based Views
+
+Django's generic views support async methods. All HTTP method handlers must be either all sync or all async.
+
+```python
+from django.views.generic import View
+from django.http import JsonResponse
+import asyncio
+
+class AsyncView(View):
+    async def get(self, request, *args, **kwargs):
+        # Perform async operations
+        await asyncio.sleep(0.5)
+        return JsonResponse({"status": "success"})
+    
+    async def post(self, request, *args, **kwargs):
+        # All methods must be async
+        data = await self.process_data()
+        return JsonResponse(data)
+    
+    async def process_data(self):
+        await asyncio.sleep(0.1)
+        return {"processed": True}
+```
+
+<Warning>
+HTTP handlers in a class-based view must either be **all sync or all async**. Mixing sync and async methods will raise an `ImproperlyConfigured` error.
+</Warning>
+
+### View Detection
+
+Django automatically detects whether a view is async using the `view_is_async` property:
+
+```python
+from django.views.generic import View
+from inspect import iscoroutinefunction
+
+class MyView(View):
+    @classproperty
+    def view_is_async(cls):
+        handlers = [
+            getattr(cls, method)
+            for method in cls.http_method_names
+            if (method != 'options' and hasattr(cls, method))
+        ]
+        if not handlers:
+            return False
+        is_async = iscoroutinefunction(handlers[0])
+        if not all(iscoroutinefunction(h) == is_async for h in handlers[1:]):
+            raise ImproperlyConfigured(
+                f"{cls.__qualname__} HTTP handlers must either be all sync or all async."
+            )
+        return is_async
+```
+
+## Async ORM Operations
+
+Django provides async versions of many ORM methods.
+
+### Async QuerySet Methods
+
+```python
+from django.http import JsonResponse
+from myapp.models import Article
+
+async def article_list(request):
+    # Async iteration
+    articles = []
+    async for article in Article.objects.filter(published=True):
+        articles.append({
+            "title": article.title,
+            "author": article.author
+        })
+    
+    return JsonResponse({"articles": articles})
+
+async def article_detail(request, pk):
+    # Async get
+    try:
+        article = await Article.objects.aget(pk=pk)
+        return JsonResponse({
+            "title": article.title,
+            "content": article.content
+        })
+    except Article.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+```
+
+### Available Async ORM Methods
+
+```python
+# Get a single object
+article = await Article.objects.aget(pk=1)
+
+# Filter and count
+count = await Article.objects.filter(published=True).acount()
+
+# Check if exists
+exists = await Article.objects.filter(title="Django").aexists()
+
+# Get first/last
+first = await Article.objects.afirst()
+last = await Article.objects.alast()
+
+# Create an object
+article = await Article.objects.acreate(
+    title="New Article",
+    content="Content here"
+)
+
+# Update objects
+await Article.objects.filter(published=False).aupdate(published=True)
+
+# Delete objects
+await Article.objects.filter(archived=True).adelete()
+```
+
+<Tip>
+Use async ORM methods when you're in an async context. Don't mix sync and async ORM calls without proper adapters.
+</Tip>
+
+## Async Decorators
+
+Django's decorators automatically detect and support async views.
+
+### Cache Control (Async)
+
+```python
+from django.views.decorators.cache import cache_control, never_cache
+from inspect import iscoroutinefunction
+
+@cache_control(max_age=3600)
+async def cached_async_view(request):
+    # This view will be cached for 1 hour
+    return JsonResponse({"data": "cached"})
+
+@never_cache
+async def no_cache_view(request):
+    # This view will never be cached
+    return JsonResponse({"timestamp": "current"})
+```
+
+### CSRF Protection (Async)
+
+```python
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
+
+@csrf_exempt
+async def api_endpoint(request):
+    # CSRF protection is disabled for this async view
+    return JsonResponse({"status": "ok"})
+
+@csrf_protect
+async def protected_view(request):
+    # CSRF protection is enforced
+    return JsonResponse({"protected": True})
+```
+
+## Sync to Async Adapters
+
+When you need to call sync code from async views, use `sync_to_async`.
+
+```python
+from asgiref.sync import sync_to_async, async_to_sync
+from django.contrib.auth.models import User
+
+# Wrap sync function
+def get_user_count():
+    return User.objects.count()
+
+async def user_stats(request):
+    # Call sync function from async context
+    count = await sync_to_async(get_user_count)()
+    return JsonResponse({"total_users": count})
+
+# Thread-sensitive operations
+@sync_to_async(thread_sensitive=True)
+def get_current_user(request):
+    return request.user
+
+async def profile_view(request):
+    user = await get_current_user(request)
+    return JsonResponse({"username": user.username})
+```
+
+<Warning>
+Use `thread_sensitive=True` when calling code that depends on thread-local state (like the request object).
+</Warning>
+
+## Performance Considerations
+
+### When to Use Async Views
+
+**Good for:**
+- I/O-bound operations (external APIs, file operations)
+- Long-running operations that can be parallelized
+- WebSocket connections
+- Server-sent events
+
+**Not ideal for:**
+- CPU-bound operations
+- Primarily database-heavy operations (use connection pooling instead)
+- Simple views with minimal I/O
+
+### Example: Parallel API Calls
+
+```python
+import asyncio
+import httpx
+from django.http import JsonResponse
+
+async def aggregate_data(request):
+    async with httpx.AsyncClient() as client:
+        # Make parallel requests
+        responses = await asyncio.gather(
+            client.get("https://api1.example.com/data"),
+            client.get("https://api2.example.com/data"),
+            client.get("https://api3.example.com/data"),
+        )
+        
+        data = [r.json() for r in responses]
+        return JsonResponse({"aggregated": data})
+```
+
+## Best Practices
+
+<Tip>
+1. **Keep it consistent**: Don't mix sync and async methods in class-based views
+2. **Use async ORMs**: Prefer `aget()`, `afilter()`, etc. in async contexts
+3. **Avoid blocking calls**: Don't use `time.sleep()` - use `asyncio.sleep()` instead
+4. **Thread-sensitive operations**: Use `sync_to_async(thread_sensitive=True)` for request-dependent code
+5. **Test thoroughly**: Async code can have subtle race conditions
+</Tip>
+
+## Settings Configuration
+
+```python
+# settings.py
+
+# ASGI application path
+ASGI_APPLICATION = 'myproject.asgi.application'
+
+# Database connection pooling for async
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mydb',
+        'CONN_MAX_AGE': 0,  # Close connections after each request
+        'CONN_HEALTH_CHECKS': True,
+    }
+}
+```
+
+<Note>
+Async views work with both ASGI and WSGI deployments, but ASGI provides better performance for async workloads.
+</Note>

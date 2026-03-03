@@ -1,0 +1,198 @@
+---
+title: Installation
+description: Install Django and set up your development environment
+---
+
+## Installing Django
+
+Get Django up and running in your development environment. Django is a Python package that can be installed using pip, Python's package manager.
+
+<Steps>
+  <Step title="Check Python Version">
+    Django requires Python 3.12 or higher. Verify your Python installation:
+    
+    ```bash
+    python --version
+    # or
+    python3 --version
+    ```
+    
+    You should see output like `Python 3.12.0` or higher. If you need to install or upgrade Python, visit [python.org](https://www.python.org/downloads/).
+    
+    <Note>
+      Django supports Python 3.12, 3.13, and 3.14. Using the latest stable Python version is recommended for the best performance and security.
+    </Note>
+  </Step>
+
+  <Step title="Install Django">
+    Install Django using pip:
+    
+    ```bash
+    pip install Django
+    ```
+    
+    This will install the latest stable version of Django along with its core dependencies:
+    
+    - **asgiref** (>= 3.9.1) - ASGI specification support for async views
+    - **sqlparse** (>= 0.5.0) - SQL query parsing and formatting
+    - **tzdata** - Timezone database (Windows only)
+    
+    <Tip>
+      For a specific version, use: `pip install Django==5.1.0`
+    </Tip>
+  </Step>
+
+  <Step title="Verify Installation">
+    Confirm Django is installed correctly by checking the version:
+    
+    ```bash
+    django-admin --version
+    ```
+    
+    You should see output like `5.1` or similar, indicating the Django version.
+    
+    You can also verify in Python:
+    
+    ```python
+    import django
+    print(django.get_version())
+    # Output: 5.1
+    ```
+  </Step>
+
+  <Step title="Optional: Enhanced Password Hashing">
+    Django supports additional password hashing algorithms for enhanced security. Install optional dependencies:
+    
+    <CodeGroup>
+    ```bash Argon2
+    pip install Django[argon2]
+    ```
+    
+    ```bash bcrypt
+    pip install Django[bcrypt]
+    ```
+    
+    ```bash Both
+    pip install Django[argon2,bcrypt]
+    ```
+    </CodeGroup>
+    
+    These optional packages provide:
+    
+    - **argon2-cffi** (>= 23.1.0) - Argon2 password hashing (recommended)
+    - **bcrypt** (>= 4.1.1) - bcrypt password hashing
+    
+    <Note>
+      Argon2 is the winner of the Password Hashing Competition and provides better security than Django's default PBKDF2 hasher. It's recommended for new projects.
+    </Note>
+  </Step>
+
+  <Step title="Create a Virtual Environment (Recommended)">
+    It's best practice to use a virtual environment to isolate your project dependencies:
+    
+    ```bash
+    # Create a virtual environment
+    python -m venv myenv
+    
+    # Activate it (Linux/macOS)
+    source myenv/bin/activate
+    
+    # Activate it (Windows)
+    myenv\Scripts\activate
+    
+    # Now install Django in the virtual environment
+    pip install Django
+    ```
+    
+    <Tip>
+      With a virtual environment activated, you can install packages without affecting your system Python installation.
+    </Tip>
+  </Step>
+</Steps>
+
+## Verify Your Setup
+
+Test that `django-admin` is available and ready to create projects:
+
+```bash
+django-admin help
+```
+
+You should see a list of available commands:
+
+```
+Type 'django-admin help <subcommand>' for help on a specific subcommand.
+
+Available subcommands:
+
+[django]
+    check
+    compilemessages
+    createcachetable
+    dbshell
+    diffsettings
+    dumpdata
+    flush
+    inspectdb
+    loaddata
+    makemessages
+    makemigrations
+    migrate
+    optimizemigration
+    runserver
+    sendtestemail
+    shell
+    showmigrations
+    sqlflush
+    sqlmigrate
+    sqlsequencereset
+    squashmigrations
+    startapp
+    startproject
+    test
+    testserver
+```
+
+## Next Steps
+
+Now that Django is installed, you're ready to create your first project!
+
+<Card
+  title="Quick Start Guide"
+  icon="rocket"
+  href="/quickstart"
+>
+  Follow our quickstart guide to build your first Django application
+</Card>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Command not found: django-admin">
+    If `django-admin` is not found, make sure:
+    
+    1. Django is installed: `pip list | grep Django`
+    2. Your Python scripts directory is in your PATH
+    3. You're using the correct Python/pip (check with `which python` and `which pip`)
+    
+    On some systems, you may need to use `python -m django` instead of `django-admin`.
+  </Accordion>
+  
+  <Accordion title="Permission denied during installation">
+    If you get permission errors:
+    
+    - Use a virtual environment (recommended)
+    - Or install with `pip install --user Django`
+    - Avoid using `sudo pip install` as it can cause permission issues
+  </Accordion>
+  
+  <Accordion title="Multiple Python versions">
+    If you have multiple Python versions:
+    
+    ```bash
+    # Use Python 3.12 specifically
+    python3.12 -m pip install Django
+    python3.12 -m django --version
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,428 @@
+---
+title: ContentTypes Framework
+description: Generic relations and content type tracking for Django models
+---
+
+The contenttypes framework provides a way to track all models installed in your Django project and create generic relationships between models.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.contenttypes',
+]
+```
+
+Run migrations to create the `django_content_type` table:
+
+```bash
+python manage.py migrate
+```
+
+## ContentType Model
+
+The `ContentType` model is defined in `django.contrib.contenttypes.models`:
+
+```python
+from django.contrib.contenttypes.models import ContentType
+
+# Get ContentType for a model
+from myapp.models import Article
+
+article_type = ContentType.objects.get_for_model(Article)
+print(article_type)  # myapp | article
+print(article_type.app_label)  # 'myapp'
+print(article_type.model)  # 'article'
+
+# Get the model class back
+model_class = article_type.model_class()
+print(model_class)  # <class 'myapp.models.Article'>
+
+# Get by app and model name
+content_type = ContentType.objects.get(app_label='myapp', model='article')
+```
+
+## Generic Foreign Keys
+
+Generic foreign keys allow a model to reference any other model. Defined in `django.contrib.contenttypes.fields.GenericForeignKey`:
+
+```python models.py
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+
+class Comment(models.Model):
+    # Generic relation fields
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    
+    # Comment fields
+    author = models.ForeignKey('auth.User', on_delete=models.CASCADE)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f'Comment by {self.author} on {self.content_object}'
+```
+
+### Using Generic Foreign Keys
+
+```python
+from myapp.models import Article, Video, Comment
+from django.contrib.auth.models import User
+
+user = User.objects.first()
+article = Article.objects.first()
+video = Video.objects.first()
+
+# Create comment on article
+comment1 = Comment.objects.create(
+    content_object=article,
+    author=user,
+    text='Great article!'
+)
+
+# Create comment on video
+comment2 = Comment.objects.create(
+    content_object=video,
+    author=user,
+    text='Amazing video!'
+)
+
+# Access the related object
+print(comment1.content_object)  # <Article: ...>
+print(comment2.content_object)  # <Video: ...>
+
+# Query by content type
+from django.contrib.contenttypes.models import ContentType
+
+article_type = ContentType.objects.get_for_model(Article)
+article_comments = Comment.objects.filter(content_type=article_type)
+```
+
+## Generic Relations (Reverse)
+
+Use `GenericRelation` to access generic foreign keys in reverse:
+
+```python models.py
+from django.contrib.contenttypes.fields import GenericRelation
+from django.db import models
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    
+    # Reverse generic relation
+    comments = GenericRelation('Comment')
+    
+    def __str__(self):
+        return self.title
+
+class Video(models.Model):
+    title = models.CharField(max_length=200)
+    url = models.URLField()
+    
+    # Reverse generic relation
+    comments = GenericRelation('Comment')
+    
+    def __str__(self):
+        return self.title
+```
+
+### Using Generic Relations
+
+```python
+# Access comments from article
+article = Article.objects.get(pk=1)
+comments = article.comments.all()
+
+# Filter
+recent_comments = article.comments.filter(
+    created_at__gte=timezone.now() - timedelta(days=7)
+)
+
+# Count
+comment_count = article.comments.count()
+
+# Create comment through relation
+article.comments.create(
+    author=user,
+    text='New comment'
+)
+
+# Prefetch for performance
+from django.db.models import Prefetch
+
+articles = Article.objects.prefetch_related('comments').all()
+```
+
+## Generic Inline Forms
+
+Use generic inlines in the admin:
+
+```python admin.py
+from django.contrib import admin
+from django.contrib.contenttypes.admin import GenericTabularInline, GenericStackedInline
+from myapp.models import Article, Comment
+
+class CommentInline(GenericTabularInline):
+    model = Comment
+    extra = 1
+    fields = ['author', 'text', 'created_at']
+    readonly_fields = ['created_at']
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    inlines = [CommentInline]
+```
+
+## Advanced Generic Relations
+
+### Multiple Generic Foreign Keys
+
+```python models.py
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+
+class Activity(models.Model):
+    """Track activities on different types of objects."""
+    
+    # The user who performed the action
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
+    
+    # The action performed
+    action = models.CharField(max_length=50)
+    
+    # The object the action was performed on (actor)
+    actor_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        related_name='actor_activities'
+    )
+    actor_object_id = models.PositiveIntegerField()
+    actor = GenericForeignKey('actor_content_type', 'actor_object_id')
+    
+    # The object affected by the action (target)
+    target_content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        related_name='target_activities',
+        null=True,
+        blank=True
+    )
+    target_object_id = models.PositiveIntegerField(null=True, blank=True)
+    target = GenericForeignKey('target_content_type', 'target_object_id')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        if self.target:
+            return f'{self.user} {self.action} {self.actor} on {self.target}'
+        return f'{self.user} {self.action} {self.actor}'
+```
+
+### Tagged Items Example
+
+```python models.py
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+
+class Tag(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(unique=True)
+    
+    def __str__(self):
+        return self.name
+
+class TaggedItem(models.Model):
+    """Through model for generic tagging."""
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
+    
+    # Generic relation to any model
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+        unique_together = [['tag', 'content_type', 'object_id']]
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    tags = GenericRelation(TaggedItem)
+
+class Video(models.Model):
+    title = models.CharField(max_length=200)
+    url = models.URLField()
+    tags = GenericRelation(TaggedItem)
+```
+
+### Using the Tagging System
+
+```python
+from myapp.models import Article, Tag, TaggedItem
+
+# Create tags
+django_tag = Tag.objects.create(name='Django', slug='django')
+python_tag = Tag.objects.create(name='Python', slug='python')
+
+# Create article
+article = Article.objects.create(
+    title='Django Tutorial',
+    content='Learn Django...'
+)
+
+# Add tags to article
+TaggedItem.objects.create(tag=django_tag, content_object=article)
+TaggedItem.objects.create(tag=python_tag, content_object=article)
+
+# Get tags for article
+article_tags = Tag.objects.filter(
+    taggeditem__content_type=ContentType.objects.get_for_model(Article),
+    taggeditem__object_id=article.id
+)
+
+# Find all articles with a specific tag
+django_articles = Article.objects.filter(
+    tags__tag=django_tag
+).distinct()
+```
+
+## Querying ContentType
+
+```python
+from django.contrib.contenttypes.models import ContentType
+
+# Get all content types
+all_types = ContentType.objects.all()
+
+# Get content types for an app
+myapp_types = ContentType.objects.filter(app_label='myapp')
+
+# Get multiple content types
+from myapp.models import Article, Video
+
+content_types = ContentType.objects.get_for_models(
+    Article, Video,
+    for_concrete_models=False
+)
+print(content_types[Article])  # ContentType for Article
+print(content_types[Video])    # ContentType for Video
+
+# Natural key lookup
+ct = ContentType.objects.get_by_natural_key('myapp', 'article')
+```
+
+## Performance Considerations
+
+### Prefetching Generic Relations
+
+```python
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Prefetch
+
+# Prefetch generic relations
+comments = Comment.objects.select_related('content_type').all()
+
+# For specific content type
+article_ct = ContentType.objects.get_for_model(Article)
+comments = Comment.objects.filter(
+    content_type=article_ct
+).select_related('content_type', 'content_type__article')
+```
+
+### Optimizing Queries
+
+```python
+# BAD: N+1 queries
+for comment in Comment.objects.all():
+    print(comment.content_object.title)  # Separate query each time
+
+# GOOD: Prefetch related objects
+from django.contrib.contenttypes.models import ContentType
+
+article_ct = ContentType.objects.get_for_model(Article)
+video_ct = ContentType.objects.get_for_model(Video)
+
+# Get comments with prefetched objects
+comments = Comment.objects.filter(
+    content_type__in=[article_ct, video_ct]
+).select_related('content_type')
+
+# Manually prefetch if needed
+article_ids = [c.object_id for c in comments if c.content_type == article_ct]
+articles = {a.id: a for a in Article.objects.filter(id__in=article_ids)}
+
+for comment in comments:
+    if comment.content_type == article_ct:
+        comment._content_object_cache = articles.get(comment.object_id)
+```
+
+## Common Use Cases
+
+### Activity Streams
+
+```python models.py
+class Action(models.Model):
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
+    verb = models.CharField(max_length=100)
+    
+    target_ct = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        related_name='target_obj'
+    )
+    target_id = models.PositiveIntegerField()
+    target = GenericForeignKey('target_ct', 'target_id')
+    
+    created = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created']
+```
+
+### Favorites/Bookmarks
+
+```python models.py
+class Favorite(models.Model):
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
+    
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey()
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = [['user', 'content_type', 'object_id']]
+```
+
+## Key Classes Reference
+
+### ContentType
+
+Location: `django.contrib.contenttypes.models.ContentType`
+
+Tracks all models in your Django project.
+
+### GenericForeignKey
+
+Location: `django.contrib.contenttypes.fields.GenericForeignKey`
+
+Provides a generic many-to-one relation to any model.
+
+### GenericRelation
+
+Location: `django.contrib.contenttypes.fields.GenericRelation`
+
+Provides reverse access to generic foreign keys.
+
+<Note>
+Generic foreign keys don't create database constraints, so you're responsible for maintaining referential integrity.
+</Note>

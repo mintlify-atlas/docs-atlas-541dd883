@@ -1,0 +1,545 @@
+---
+title: Static Files
+description: Managing and serving static files in Django applications
+---
+
+The staticfiles app collects static files from each of your applications (and other locations) into a single location for production serving.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.staticfiles',
+]
+
+# URL to use when referring to static files
+STATIC_URL = '/static/'
+
+# Absolute path to directory where collectstatic will collect files
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Additional locations of static files
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+    '/var/www/static',
+]
+```
+
+## Directory Structure
+
+Organize static files in your app:
+
+```
+myapp/
+├── static/
+│   └── myapp/
+│       ├── css/
+│       │   └── style.css
+│       ├── js/
+│       │   └── script.js
+│       └── images/
+│           └── logo.png
+└── templates/
+```
+
+## Using Static Files in Templates
+
+```django template.html
+{% load static %}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Site</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="{% static 'myapp/css/style.css' %}">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="{% static 'myapp/images/favicon.ico' %}">
+</head>
+<body>
+    <!-- Images -->
+    <img src="{% static 'myapp/images/logo.png' %}" alt="Logo">
+    
+    <!-- JavaScript -->
+    <script src="{% static 'myapp/js/script.js' %}"></script>
+    
+    <!-- With variable -->
+    {% with 'myapp/images/banner.jpg' as banner %}
+        <img src="{% static banner %}" alt="Banner">
+    {% endwith %}
+</body>
+</html>
+```
+
+### Get Static URL in Python
+
+```python views.py
+from django.templatetags.static import static
+from django.shortcuts import render
+
+def my_view(request):
+    logo_url = static('myapp/images/logo.png')
+    # Returns: '/static/myapp/images/logo.png'
+    
+    return render(request, 'template.html', {
+        'logo_url': logo_url
+    })
+```
+
+## Development Server
+
+In development, Django automatically serves static files when `DEBUG = True`:
+
+```python urls.py
+from django.contrib import admin
+from django.urls import path
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    # Static files are automatically served in development
+]
+```
+
+If you need to manually configure:
+
+```python urls.py
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    # Your URL patterns
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+```
+
+## CollectStatic Command
+
+Collect all static files into `STATIC_ROOT`:
+
+```bash
+python manage.py collectstatic
+```
+
+This command:
+1. Searches for static files in all apps
+2. Searches in `STATICFILES_DIRS`
+3. Copies all files to `STATIC_ROOT`
+
+### CollectStatic Options
+
+```bash
+# Don't prompt for confirmation
+python manage.py collectstatic --noinput
+
+# Clear existing files first
+python manage.py collectstatic --clear
+
+# Don't copy files, just delete
+python manage.py collectstatic --clear --noinput
+
+# Dry run (show what would be collected)
+python manage.py collectstatic --dry-run
+
+# Don't ignore common patterns
+python manage.py collectstatic --no-default-ignore
+```
+
+## Static Files Finders
+
+Finders locate static files. Defined in `django.contrib.staticfiles.finders`:
+
+```python settings.py
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+```
+
+### FileSystemFinder
+
+Finds files in `STATICFILES_DIRS`:
+
+```python settings.py
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+    ('downloads', BASE_DIR / 'downloads'),  # With prefix
+]
+```
+
+### AppDirectoriesFinder
+
+Finds files in each app's `static/` directory.
+
+### Custom Finder
+
+```python finders.py
+from django.contrib.staticfiles.finders import BaseFinder
+from django.core.files.storage import FileSystemStorage
+
+class CustomFinder(BaseFinder):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.storage = FileSystemStorage(location='/custom/path')
+    
+    def find(self, path, all=False):
+        # Find a static file
+        matches = []
+        # ... implementation
+        return matches if all else matches[0] if matches else None
+    
+    def list(self, ignore_patterns):
+        # List all files
+        for root, dirs, files in os.walk(self.storage.location):
+            for filename in files:
+                yield filename, self.storage
+```
+
+```python settings.py
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+    'myapp.finders.CustomFinder',
+]
+```
+
+## Storage Backends
+
+Configure how static files are stored:
+
+```python settings.py
+# Default
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
+# Manifest storage (adds hash to filenames for cache-busting)
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+```
+
+### ManifestStaticFilesStorage
+
+Adds MD5 hash to filenames:
+
+```python settings.py
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+```
+
+```bash
+python manage.py collectstatic
+```
+
+Generates:
+```
+style.css -> style.abc123.css
+script.js -> script.def456.js
+```
+
+The `{% static %}` tag automatically uses hashed names.
+
+### Custom Storage
+
+```python storage.py
+from django.contrib.staticfiles.storage import ManifestStaticFilesStorage
+
+class CustomStaticStorage(ManifestStaticFilesStorage):
+    def __init__(self, *args, **kwargs):
+        kwargs['file_permissions_mode'] = 0o644
+        kwargs['directory_permissions_mode'] = 0o755
+        super().__init__(*args, **kwargs)
+    
+    def get_available_name(self, name, max_length=None):
+        # Customize filename generation
+        return super().get_available_name(name, max_length)
+```
+
+## FindStatic Command
+
+Find where a static file is located:
+
+```bash
+# Find first match
+python manage.py findstatic css/style.css
+
+# Find all matches
+python manage.py findstatic css/style.css --first
+```
+
+Output:
+```
+Found 'css/style.css' here:
+  /path/to/myapp/static/css/style.css
+  /path/to/static/css/style.css
+```
+
+## Settings Reference
+
+```python settings.py
+# URL prefix for static files
+STATIC_URL = '/static/'
+
+# Absolute path to collected static files
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Additional static file locations
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+    ('prefix', BASE_DIR / 'other_static'),
+]
+
+# Static file finders
+STATICFILES_FINDERS = [
+    'django.contrib.staticfiles.finders.FileSystemFinder',
+    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+]
+
+# Storage backend
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+```
+
+## Template Tags
+
+### static
+
+Get URL for a static file:
+
+```django
+{% load static %}
+<img src="{% static 'images/logo.png' %}">
+```
+
+### get_static_prefix
+
+Get the `STATIC_URL` setting:
+
+```django
+{% load static %}
+{% get_static_prefix as STATIC_PREFIX %}
+<img src="{{ STATIC_PREFIX }}images/logo.png">
+```
+
+### get_media_prefix
+
+Get the `MEDIA_URL` setting:
+
+```django
+{% load static %}
+{% get_media_prefix as MEDIA_PREFIX %}
+<img src="{{ MEDIA_PREFIX }}uploads/photo.jpg">
+```
+
+## Production Setup
+
+### With Nginx
+
+```nginx nginx.conf
+server {
+    listen 80;
+    server_name example.com;
+    
+    # Serve static files
+    location /static/ {
+        alias /path/to/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Serve media files
+    location /media/ {
+        alias /path/to/media/;
+    }
+    
+    # Proxy to Django
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### With Apache
+
+```apache
+<VirtualHost *:80>
+    ServerName example.com
+    
+    # Serve static files
+    Alias /static/ /path/to/staticfiles/
+    <Directory /path/to/staticfiles>
+        Require all granted
+        ExpiresActive On
+        ExpiresDefault "access plus 1 year"
+    </Directory>
+    
+    # Serve media files
+    Alias /media/ /path/to/media/
+    <Directory /path/to/media>
+        Require all granted
+    </Directory>
+    
+    # WSGI configuration
+    WSGIScriptAlias / /path/to/wsgi.py
+</VirtualHost>
+```
+
+### With WhiteNoise
+
+Simplified static file serving:
+
+```bash
+pip install whitenoise
+```
+
+```python settings.py
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add this
+    # ...
+]
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+```
+
+## CDN Integration
+
+Serve static files from a CDN:
+
+```python settings.py
+# Use CDN URL for static files
+if not DEBUG:
+    STATIC_URL = 'https://cdn.example.com/static/'
+```
+
+### Custom Storage for CDN
+
+```python storage.py
+from django.contrib.staticfiles.storage import ManifestStaticFilesStorage
+from storages.backends.s3boto3 import S3Boto3Storage
+
+class StaticStorage(S3Boto3Storage):
+    location = 'static'
+    default_acl = 'public-read'
+
+class MediaStorage(S3Boto3Storage):
+    location = 'media'
+    default_acl = 'public-read'
+    file_overwrite = False
+```
+
+```python settings.py
+if not DEBUG:
+    # AWS S3 settings
+    AWS_ACCESS_KEY_ID = 'your-access-key'
+    AWS_SECRET_ACCESS_KEY = 'your-secret-key'
+    AWS_STORAGE_BUCKET_NAME = 'your-bucket-name'
+    AWS_S3_REGION_NAME = 'us-east-1'
+    
+    # Static files
+    STATICFILES_STORAGE = 'myapp.storage.StaticStorage'
+    STATIC_URL = f'https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/static/'
+    
+    # Media files
+    DEFAULT_FILE_STORAGE = 'myapp.storage.MediaStorage'
+    MEDIA_URL = f'https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/media/'
+```
+
+## Media Files vs Static Files
+
+Media files are user-uploaded files:
+
+```python settings.py
+# Media files (user uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Static files (CSS, JS, images)
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+```
+
+```python urls.py
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    # Your URLs
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+
+## Best Practices
+
+### Organize by Type
+
+```
+static/
+├── css/
+│   ├── base.css
+│   ├── forms.css
+│   └── components/
+│       └── buttons.css
+├── js/
+│   ├── main.js
+│   └── utils.js
+├── images/
+│   ├── logo.png
+│   └── icons/
+└── vendor/
+    ├── bootstrap.min.css
+    └── jquery.min.js
+```
+
+### Version Control
+
+Don't commit collected static files:
+
+```gitignore .gitignore
+# Collected static files
+/staticfiles/
+
+# Media files
+/media/
+```
+
+### Cache Busting
+
+Use `ManifestStaticFilesStorage` for automatic cache busting:
+
+```python settings.py
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+```
+
+## Key Classes Reference
+
+### FileSystemFinder
+
+Location: `django.contrib.staticfiles.finders.FileSystemFinder`
+
+Finds files in `STATICFILES_DIRS`.
+
+### AppDirectoriesFinder
+
+Location: `django.contrib.staticfiles.finders.AppDirectoriesFinder`
+
+Finds files in app `static/` directories.
+
+### StaticFilesStorage
+
+Location: `django.contrib.staticfiles.storage.StaticFilesStorage`
+
+Default storage backend for static files.
+
+### ManifestStaticFilesStorage
+
+Location: `django.contrib.staticfiles.storage.ManifestStaticFilesStorage`
+
+Adds file hashes for cache busting.
+
+<Note>
+Never serve static files with Django in production. Use a web server (Nginx, Apache) or CDN instead.
+</Note>

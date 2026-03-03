@@ -1,0 +1,657 @@
+---
+title: Context Processors
+description: Built-in context processors and creating custom ones
+---
+
+Context processors are functions that add variables to the template context automatically. They're called for every request when using `RequestContext`.
+
+## What are Context Processors?
+
+Context processors are callables that take a request object and return a dictionary of items to be merged into the template context.
+
+```python
+def my_context_processor(request):
+    return {
+        'app_name': 'My Application',
+        'version': '1.0.0',
+    }
+```
+
+## Configuration
+
+Configure context processors in your Django settings:
+
+```python
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+                # Your custom processors
+                'myapp.context_processors.custom',
+            ],
+        },
+    },
+]
+```
+
+## Built-in Context Processors
+
+### django.template.context_processors
+
+<Accordion title="csrf">
+  Provides CSRF token for form protection.
+
+  **Path:** `django.template.context_processors.csrf`
+
+  **Variables added:**
+  - `csrf_token` - CSRF token value or 'NOTPROVIDED'
+
+  **Example:**
+  ```django
+  <form method="post">
+      {% csrf_token %}
+      <!-- form fields -->
+  </form>
+  ```
+
+  **Implementation:**
+  ```python
+  def csrf(request):
+      """
+      Context processor that provides a CSRF token, or the string
+      'NOTPROVIDED' if it has not been provided by either a view
+      decorator or the middleware.
+      """
+      def _get_val():
+          token = get_token(request)
+          if token is None:
+              return "NOTPROVIDED"
+          else:
+              return token
+      
+      return {"csrf_token": SimpleLazyObject(_get_val)}
+  ```
+
+  **Note:** Always include this processor for security.
+</Accordion>
+
+<Accordion title="debug">
+  Provides debugging information when DEBUG=True.
+
+  **Path:** `django.template.context_processors.debug`
+
+  **Variables added (only when DEBUG=True and IP in INTERNAL_IPS):**
+  - `debug` - Boolean True
+  - `sql_queries` - List of SQL queries executed
+
+  **Example:**
+  ```django
+  {% if debug %}
+      <div class="debug-info">
+          <h3>SQL Queries: {{ sql_queries|length }}</h3>
+          {% for query in sql_queries %}
+              <pre>{{ query.sql }}</pre>
+          {% endfor %}
+      </div>
+  {% endif %}
+  ```
+
+  **Implementation:**
+  ```python
+  def debug(request):
+      """
+      Return context variables helpful for debugging.
+      """
+      context_extras = {}
+      if settings.DEBUG and request.META.get("REMOTE_ADDR") in settings.INTERNAL_IPS:
+          context_extras["debug"] = True
+          from django.db import connections
+          
+          context_extras["sql_queries"] = lazy(
+              lambda: list(
+                  itertools.chain.from_iterable(
+                      connections[x].queries for x in connections
+                  )
+              ),
+              list,
+          )
+      return context_extras
+  ```
+
+  **Configuration required:**
+  ```python
+  DEBUG = True
+  INTERNAL_IPS = ['127.0.0.1']
+  ```
+</Accordion>
+
+<Accordion title="request">
+  Adds the request object to the template context.
+
+  **Path:** `django.template.context_processors.request`
+
+  **Variables added:**
+  - `request` - The current HttpRequest object
+
+  **Example:**
+  ```django
+  <p>Current path: {{ request.path }}</p>
+  <p>User: {{ request.user.username }}</p>
+  <p>Method: {{ request.method }}</p>
+  
+  {% if request.user.is_authenticated %}
+      <a href="{% url 'logout' %}">Logout</a>
+  {% endif %}
+  ```
+
+  **Implementation:**
+  ```python
+  def request(request):
+      return {"request": request}
+  ```
+
+  **Available request attributes:**
+  - `request.method` - GET, POST, etc.
+  - `request.path` - URL path
+  - `request.GET` - GET parameters
+  - `request.POST` - POST data
+  - `request.user` - Current user
+  - `request.session` - Session data
+</Accordion>
+
+<Accordion title="i18n">
+  Provides internationalization variables.
+
+  **Path:** `django.template.context_processors.i18n`
+
+  **Variables added:**
+  - `LANGUAGES` - List of available languages
+  - `LANGUAGE_CODE` - Current language code
+  - `LANGUAGE_BIDI` - Boolean, True if current language is bidirectional
+
+  **Example:**
+  ```django
+  <html lang="{{ LANGUAGE_CODE }}" {% if LANGUAGE_BIDI %}dir="rtl"{% endif %}>
+  
+  <select name="language">
+      {% for code, name in LANGUAGES %}
+          <option value="{{ code }}" {% if code == LANGUAGE_CODE %}selected{% endif %}>
+              {{ name }}
+          </option>
+      {% endfor %}
+  </select>
+  ```
+
+  **Implementation:**
+  ```python
+  def i18n(request):
+      from django.utils import translation
+      
+      return {
+          "LANGUAGES": settings.LANGUAGES,
+          "LANGUAGE_CODE": translation.get_language(),
+          "LANGUAGE_BIDI": translation.get_language_bidi(),
+      }
+  ```
+</Accordion>
+
+<Accordion title="tz">
+  Provides timezone information.
+
+  **Path:** `django.template.context_processors.tz`
+
+  **Variables added:**
+  - `TIME_ZONE` - Name of the current timezone
+
+  **Example:**
+  ```django
+  <p>Current timezone: {{ TIME_ZONE }}</p>
+  ```
+
+  **Implementation:**
+  ```python
+  def tz(request):
+      from django.utils import timezone
+      
+      return {"TIME_ZONE": timezone.get_current_timezone_name()}
+  ```
+</Accordion>
+
+<Accordion title="static">
+  Adds STATIC_URL to the context.
+
+  **Path:** `django.template.context_processors.static`
+
+  **Variables added:**
+  - `STATIC_URL` - URL prefix for static files
+
+  **Example:**
+  ```django
+  <link rel="stylesheet" href="{{ STATIC_URL }}css/style.css">
+  <script src="{{ STATIC_URL }}js/app.js"></script>
+  ```
+
+  **Implementation:**
+  ```python
+  def static(request):
+      """
+      Add static-related context variables to the context.
+      """
+      return {"STATIC_URL": settings.STATIC_URL}
+  ```
+
+  **Note:** Better to use `{% load static %}` and `{% static %}` tag.
+</Accordion>
+
+<Accordion title="media">
+  Adds MEDIA_URL to the context.
+
+  **Path:** `django.template.context_processors.media`
+
+  **Variables added:**
+  - `MEDIA_URL` - URL prefix for media files
+
+  **Example:**
+  ```django
+  <img src="{{ MEDIA_URL }}{{ user.profile.avatar }}" alt="Avatar">
+  ```
+
+  **Implementation:**
+  ```python
+  def media(request):
+      """
+      Add media-related context variables to the context.
+      """
+      return {"MEDIA_URL": settings.MEDIA_URL}
+  ```
+</Accordion>
+
+<Accordion title="csp">
+  Provides Content Security Policy nonce.
+
+  **Path:** `django.template.context_processors.csp`
+
+  **Variables added:**
+  - `csp_nonce` - Nonce value for CSP headers
+
+  **Example:**
+  ```django
+  <script nonce="{{ csp_nonce }}">
+      // Inline script allowed with CSP
+      console.log('Hello');
+  </script>
+  ```
+
+  **Implementation:**
+  ```python
+  def csp(request):
+      """
+      Add the CSP nonce to the context.
+      """
+      return {"csp_nonce": get_nonce(request)}
+  ```
+</Accordion>
+
+### django.contrib.auth.context_processors
+
+<Accordion title="auth">
+  Provides user and permissions information.
+
+  **Path:** `django.contrib.auth.context_processors.auth`
+
+  **Variables added:**
+  - `user` - Current User instance (or AnonymousUser)
+  - `perms` - Permissions wrapper object
+
+  **Example:**
+  ```django
+  {% if user.is_authenticated %}
+      <p>Welcome, {{ user.username }}!</p>
+      <p>Email: {{ user.email }}</p>
+      
+      {% if perms.blog.add_post %}
+          <a href="{% url 'create_post' %}">Create Post</a>
+      {% endif %}
+  {% else %}
+      <a href="{% url 'login' %}">Login</a>
+  {% endif %}
+  ```
+
+  **Permissions usage:**
+  ```django
+  {% if perms.app_label.permission_codename %}
+      <!-- User has permission -->
+  {% endif %}
+  
+  {% if perms.blog %}
+      <!-- User has any permission in blog app -->
+  {% endif %}
+  ```
+</Accordion>
+
+### django.contrib.messages.context_processors
+
+<Accordion title="messages">
+  Provides flash messages.
+
+  **Path:** `django.contrib.messages.context_processors.messages`
+
+  **Variables added:**
+  - `messages` - List of message objects
+  - `DEFAULT_MESSAGE_LEVELS` - Message level constants
+
+  **Example:**
+  ```django
+  {% if messages %}
+      <ul class="messages">
+      {% for message in messages %}
+          <li class="{{ message.tags }}">
+              {{ message }}
+          </li>
+      {% endfor %}
+      </ul>
+  {% endif %}
+  ```
+
+  **Message levels:**
+  ```django
+  {% for message in messages %}
+      {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+          <div class="alert alert-danger">{{ message }}</div>
+      {% elif message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+          <div class="alert alert-success">{{ message }}</div>
+      {% endif %}
+  {% endfor %}
+  ```
+</Accordion>
+
+## Creating Custom Context Processors
+
+### Basic Context Processor
+
+Create a file (e.g., `myapp/context_processors.py`):
+
+```python
+def site_info(request):
+    """Add site-wide information to context."""
+    return {
+        'site_name': 'My Awesome Site',
+        'company_name': 'ACME Corp',
+        'support_email': 'support@example.com',
+    }
+```
+
+**Usage in templates:**
+```django
+<footer>
+    <p>&copy; 2026 {{ company_name }}</p>
+    <p>Contact: {{ support_email }}</p>
+</footer>
+```
+
+### Context Processor with Database Query
+
+```python
+from myapp.models import Announcement
+
+def global_announcements(request):
+    """Add active announcements to context."""
+    return {
+        'announcements': Announcement.objects.filter(active=True)[:3],
+    }
+```
+
+**Usage:**
+```django
+{% if announcements %}
+    <div class="announcements">
+        {% for announcement in announcements %}
+            <div class="alert">{{ announcement.message }}</div>
+        {% endfor %}
+    </div>
+{% endif %}
+```
+
+### Context Processor with Settings
+
+```python
+from django.conf import settings
+
+def app_settings(request):
+    """Expose select settings to templates."""
+    return {
+        'DEBUG': settings.DEBUG,
+        'SITE_NAME': settings.SITE_NAME,
+        'ANALYTICS_ID': settings.GOOGLE_ANALYTICS_ID,
+        'FEATURES': {
+            'blog': settings.ENABLE_BLOG,
+            'comments': settings.ENABLE_COMMENTS,
+        },
+    }
+```
+
+### Conditional Context Processor
+
+```python
+def user_preferences(request):
+    """Add user preferences if authenticated."""
+    if request.user.is_authenticated:
+        try:
+            return {
+                'preferences': request.user.profile.preferences,
+                'theme': request.user.profile.theme,
+            }
+        except AttributeError:
+            pass
+    return {}
+```
+
+### Performance-Optimized Context Processor
+
+```python
+from django.utils.functional import SimpleLazyObject
+
+def lazy_data(request):
+    """Add data that's only computed when accessed."""
+    def get_expensive_data():
+        # This only runs when the variable is used in template
+        from myapp.models import ExpensiveModel
+        return ExpensiveModel.objects.complex_query()
+    
+    return {
+        'expensive_data': SimpleLazyObject(get_expensive_data),
+    }
+```
+
+## Best Practices
+
+### 1. Keep Context Processors Lightweight
+
+```python
+# ❌ Bad: Heavy computation on every request
+def bad_processor(request):
+    return {
+        'all_users': User.objects.all(),  # Loads all users!
+        'stats': calculate_expensive_stats(),
+    }
+
+# ✅ Good: Light and specific
+def good_processor(request):
+    return {
+        'site_name': 'My Site',
+        'current_year': datetime.now().year,
+    }
+```
+
+### 2. Use Lazy Objects for Expensive Operations
+
+```python
+from django.utils.functional import lazy
+
+def smart_processor(request):
+    return {
+        'categories': lazy(
+            lambda: Category.objects.filter(active=True),
+            list
+        ),
+    }
+```
+
+### 3. Cache Results When Appropriate
+
+```python
+from django.core.cache import cache
+
+def cached_processor(request):
+    def get_navigation():
+        nav = cache.get('main_navigation')
+        if nav is None:
+            nav = MenuItem.objects.select_related().filter(parent=None)
+            cache.set('main_navigation', nav, 3600)  # 1 hour
+        return nav
+    
+    return {
+        'navigation': get_navigation(),
+    }
+```
+
+### 4. Avoid Name Collisions
+
+```python
+# ❌ Bad: Generic names that might conflict
+def bad_processor(request):
+    return {
+        'data': ...,      # Too generic
+        'items': ...,     # Too generic
+        'user': ...,      # Conflicts with auth processor
+    }
+
+# ✅ Good: Specific, namespaced names
+def good_processor(request):
+    return {
+        'site_config': ...,
+        'global_menu_items': ...,
+        'company_info': ...,
+    }
+```
+
+### 5. Document Your Context Processors
+
+```python
+def my_processor(request):
+    """
+    Adds global site configuration to template context.
+    
+    Variables added:
+        - site_config: SiteConfig object with site settings
+        - feature_flags: Dict of enabled feature flags
+        - contact_info: Dict with contact information
+    
+    Example usage in templates:
+        {{ site_config.site_name }}
+        {% if feature_flags.blog_enabled %}
+            ...
+        {% endif %}
+    """
+    return {
+        'site_config': SiteConfig.get_current(),
+        'feature_flags': get_feature_flags(),
+        'contact_info': get_contact_info(),
+    }
+```
+
+## Testing Context Processors
+
+```python
+from django.test import TestCase, RequestFactory
+from myapp.context_processors import site_info
+
+class ContextProcessorTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+    
+    def test_site_info_processor(self):
+        request = self.factory.get('/')
+        context = site_info(request)
+        
+        self.assertIn('site_name', context)
+        self.assertEqual(context['site_name'], 'My Awesome Site')
+    
+    def test_processor_in_template(self):
+        response = self.client.get('/')
+        self.assertContains(response, 'My Awesome Site')
+```
+
+## Common Patterns
+
+### Multi-tenancy
+
+```python
+def tenant_info(request):
+    """Add current tenant information."""
+    tenant = getattr(request, 'tenant', None)
+    if tenant:
+        return {
+            'tenant': tenant,
+            'tenant_name': tenant.name,
+            'tenant_logo': tenant.logo_url,
+        }
+    return {}
+```
+
+### Feature Flags
+
+```python
+def feature_flags(request):
+    """Add feature flags to context."""
+    return {
+        'features': {
+            'new_dashboard': is_feature_enabled('new_dashboard', request.user),
+            'beta_features': request.user.is_staff,
+            'dark_mode': True,
+        },
+    }
+```
+
+### Navigation
+
+```python
+def navigation(request):
+    """Add navigation menus."""
+    return {
+        'main_menu': get_main_menu(request.user),
+        'footer_links': get_footer_links(),
+        'breadcrumbs': get_breadcrumbs(request.path),
+    }
+```
+
+## Debugging Context Processors
+
+View all context variables in a template:
+
+```django
+{% if debug %}
+    <pre>
+    {% for key, value in request.context.items %}
+        {{ key }}: {{ value }}
+    {% endfor %}
+    </pre>
+{% endif %}
+```
+
+Or use the `{% debug %}` tag:
+
+```django
+<pre>{% debug %}</pre>
+```
+
+## Related
+
+- [Template Engine](/api/templates/engine)
+- [Built-in Tags](/api/templates/built-in-tags)
+- [Built-in Filters](/api/templates/built-in-filters)

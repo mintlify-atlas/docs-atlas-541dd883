@@ -1,0 +1,546 @@
+---
+title: "Task Scheduling System"
+description: "Learn how to use Django's task scheduling system for background jobs and asynchronous task processing"
+---
+
+## Introduction
+
+Django's task system provides a framework for scheduling and executing background tasks. It supports multiple backends and allows you to offload time-consuming operations from request-response cycles.
+
+## Task Basics
+
+The task system is defined in `django.tasks` and provides decorators and classes for creating and managing tasks.
+
+### Creating Tasks
+
+```python
+from django.tasks import task
+
+@task
+def send_email_task(recipient, subject, message):
+    """Simple background task."""
+    send_email(recipient, subject, message)
+    return f"Email sent to {recipient}"
+
+# With custom configuration
+@task(priority=10, queue_name="email")
+def send_priority_email(recipient, subject, message):
+    """High-priority email task."""
+    send_email(recipient, subject, message)
+```
+
+### Task Configuration
+
+From Django source (`django/tasks/base.py`):
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+
+DEFAULT_TASK_BACKEND_ALIAS = "default"
+DEFAULT_TASK_PRIORITY = 0
+DEFAULT_TASK_QUEUE_NAME = "default"
+TASK_MAX_PRIORITY = 100
+TASK_MIN_PRIORITY = -100
+
+def task(
+    function=None,
+    *,
+    priority=DEFAULT_TASK_PRIORITY,
+    queue_name=DEFAULT_TASK_QUEUE_NAME,
+    backend=DEFAULT_TASK_BACKEND_ALIAS,
+    takes_context=False,
+):
+    """Decorator to create a Task."""
+    def wrapper(f):
+        from . import task_backends
+        return task_backends[backend].task_class(
+            priority=priority,
+            func=f,
+            queue_name=queue_name,
+            backend=backend,
+            takes_context=takes_context,
+            run_after=None,
+        )
+    if function:
+        return wrapper(function)
+    return wrapper
+```
+
+## Task Class
+
+The `Task` class represents a task function with configuration:
+
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Task:
+    priority: int
+    func: Callable[..., Any]  # The Task function
+    backend: str
+    queue_name: str
+    run_after: datetime | None  # The earliest this Task will run
+    takes_context: bool = False  # Whether task receives TaskContext
+    
+    @property
+    def name(self):
+        return self.func.__name__
+    
+    @property
+    def module_path(self):
+        return f"{self.func.__module__}.{self.func.__qualname__}"
+```
+
+## Enqueueing Tasks
+
+### Basic Enqueue
+
+```python
+from myapp.tasks import send_email_task
+
+# Enqueue the task
+result = send_email_task.enqueue(
+    recipient="user@example.com",
+    subject="Hello",
+    message="Welcome!"
+)
+
+print(f"Task ID: {result.id}")
+print(f"Status: {result.status}")
+```
+
+### Async Enqueue
+
+```python
+async def process_order(order):
+    # Enqueue task asynchronously
+    result = await send_email_task.aenqueue(
+        recipient=order.user.email,
+        subject=f"Order {order.id} Confirmed",
+        message=render_template('order_confirmation.txt', order=order)
+    )
+    return result
+```
+
+### Task Configuration at Enqueue Time
+
+```python
+@task
+def process_data(data):
+    # Process data
+    pass
+
+# Customize task at enqueue time
+from datetime import datetime, timedelta
+
+# Run after 1 hour
+result = process_data.using(
+    priority=20,
+    queue_name="analytics",
+    run_after=datetime.now() + timedelta(hours=1)
+).enqueue(data={'items': [1, 2, 3]})
+
+# Use different backend
+result = process_data.using(
+    backend="redis_backend"
+).enqueue(data={'items': [1, 2, 3]})
+```
+
+## Task Results
+
+The `TaskResult` class tracks task execution:
+
+```python
+from dataclasses import dataclass
+from django.tasks import TaskResultStatus
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TaskResult:
+    task: Task
+    id: str  # Unique identifier for the task result
+    status: TaskResultStatus
+    enqueued_at: datetime | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    last_attempted_at: datetime | None
+    args: list[Any]
+    kwargs: dict[str, Any]
+    backend: str
+    errors: list[TaskError]
+    worker_ids: list[str]  # Workers which have processed the task
+    _return_value: Any | None
+    
+    @property
+    def return_value(self):
+        """The return value of the task."""
+        if self.status == TaskResultStatus.SUCCESSFUL:
+            return self._return_value
+        elif self.status == TaskResultStatus.FAILED:
+            raise ValueError("Task failed")
+        else:
+            raise ValueError("Task has not finished yet")
+    
+    @property
+    def is_finished(self):
+        return self.status in {TaskResultStatus.FAILED, TaskResultStatus.SUCCESSFUL}
+    
+    @property
+    def attempts(self):
+        return len(self.worker_ids)
+```
+
+### Task Result Status
+
+```python
+from django.db.models.enums import TextChoices
+from django.utils.translation import pgettext_lazy
+
+class TaskResultStatus(TextChoices):
+    # The Task has just been enqueued, or is ready to be executed again
+    READY = ("READY", pgettext_lazy("Task", "Ready"))
+    # The Task is currently running
+    RUNNING = ("RUNNING", pgettext_lazy("Task", "Running"))
+    # The Task raised an exception during execution
+    FAILED = ("FAILED", pgettext_lazy("Task", "Failed"))
+    # The Task has finished running successfully
+    SUCCESSFUL = ("SUCCESSFUL", pgettext_lazy("Task", "Successful"))
+```
+
+### Checking Task Results
+
+```python
+from myapp.tasks import process_data
+
+# Enqueue task
+result = process_data.enqueue(data={'value': 42})
+
+# Check status
+if result.status == TaskResultStatus.READY:
+    print("Task is queued")
+elif result.status == TaskResultStatus.RUNNING:
+    print("Task is running")
+elif result.status == TaskResultStatus.SUCCESSFUL:
+    print(f"Task completed: {result.return_value}")
+elif result.status == TaskResultStatus.FAILED:
+    print(f"Task failed after {result.attempts} attempts")
+    for error in result.errors:
+        print(f"Error: {error.exception_class_path}")
+        print(f"Traceback: {error.traceback}")
+
+# Refresh result from backend
+result.refresh()
+print(f"Updated status: {result.status}")
+
+# Async refresh
+await result.arefresh()
+```
+
+### Retrieving Results by ID
+
+```python
+# Get result by ID
+task_id = result.id
+
+# Later, retrieve the result
+retrieved = process_data.get_result(task_id)
+print(f"Status: {retrieved.status}")
+
+# Async retrieval
+retrieved = await process_data.aget_result(task_id)
+```
+
+## Task Context
+
+Tasks can receive context information about their execution:
+
+```python
+from django.tasks import task, TaskContext
+
+@task(takes_context=True)
+def retry_aware_task(context: TaskContext, data):
+    """
+    Task that receives execution context.
+    """
+    print(f"Attempt number: {context.attempt}")
+    print(f"Task ID: {context.task_result.id}")
+    print(f"Enqueued at: {context.task_result.enqueued_at}")
+    
+    if context.attempt < 3:
+        # Retry logic
+        raise Exception("Retry needed")
+    
+    # Process data
+    return process(data)
+
+# TaskContext structure
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TaskContext:
+    task_result: TaskResult
+    
+    @property
+    def attempt(self):
+        return self.task_result.attempts
+```
+
+## Task Signals
+
+Django tasks emit signals during their lifecycle:
+
+```python
+from django.dispatch import Signal, receiver
+from django.tasks.signals import task_enqueued, task_started, task_finished
+
+# Signals from django/tasks/signals.py
+task_enqueued = Signal()
+task_started = Signal()
+task_finished = Signal()
+
+@receiver(task_enqueued)
+def log_task_enqueued(sender, task_result, **kwargs):
+    logger.debug(
+        "Task id=%s path=%s enqueued backend=%s",
+        task_result.id,
+        task_result.task.module_path,
+        task_result.backend,
+    )
+
+@receiver(task_started)
+def log_task_started(sender, task_result, **kwargs):
+    logger.info(
+        "Task id=%s path=%s state=%s",
+        task_result.id,
+        task_result.task.module_path,
+        task_result.status,
+    )
+
+@receiver(task_finished)
+def log_task_finished(sender, task_result, **kwargs):
+    logger.log(
+        logging.ERROR if task_result.status == TaskResultStatus.FAILED else logging.INFO,
+        "Task id=%s path=%s state=%s",
+        task_result.id,
+        task_result.task.module_path,
+        task_result.status,
+    )
+```
+
+## Task Backends
+
+### Configuring Backends
+
+```python
+# settings.py
+
+TASKS = {
+    'default': {
+        'BACKEND': 'django.tasks.backends.immediate.ImmediateBackend',
+    },
+    'redis': {
+        'BACKEND': 'django_tasks_redis.backends.RedisBackend',
+        'OPTIONS': {
+            'url': 'redis://localhost:6379/0',
+        },
+    },
+    'database': {
+        'BACKEND': 'django_tasks_db.backends.DatabaseBackend',
+        'OPTIONS': {
+            'table_name': 'django_tasks',
+        },
+    },
+}
+```
+
+### Backend Handler
+
+From Django source:
+
+```python
+from django.utils.connection import BaseConnectionHandler
+from django.utils.module_loading import import_string
+
+class TaskBackendHandler(BaseConnectionHandler):
+    settings_name = "TASKS"
+    exception_class = InvalidTaskBackend
+
+    def create_connection(self, alias):
+        params = self.settings[alias]
+        backend = params["BACKEND"]
+        try:
+            backend_cls = import_string(backend)
+        except ImportError as e:
+            raise InvalidTaskBackend(f"Could not find backend '{backend}': {e}") from e
+        return backend_cls(alias=alias, params=params)
+
+# Global task backends instance
+task_backends = TaskBackendHandler()
+default_task_backend = ConnectionProxy(task_backends, DEFAULT_TASK_BACKEND_ALIAS)
+```
+
+### Using Specific Backends
+
+```python
+from django.tasks import task_backends
+
+# Access specific backend
+redis_backend = task_backends['redis']
+database_backend = task_backends['database']
+
+# Create task with specific backend
+@task(backend='redis')
+def redis_task(data):
+    return process(data)
+
+@task(backend='database')
+def db_task(data):
+    return process(data)
+```
+
+## Async Tasks
+
+Tasks can be async functions:
+
+```python
+import asyncio
+import httpx
+from django.tasks import task
+
+@task
+async def fetch_data_task(url):
+    """Async task for fetching external data."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.json()
+
+@task
+async def aggregate_apis():
+    """Aggregate data from multiple APIs in parallel."""
+    urls = [
+        'https://api1.example.com/data',
+        'https://api2.example.com/data',
+        'https://api3.example.com/data',
+    ]
+    
+    tasks = [fetch_data_task.enqueue(url) for url in urls]
+    results = await asyncio.gather(*[t.arefresh() for t in tasks])
+    
+    return {'aggregated': [r.return_value for r in results]}
+
+# The Task class handles both sync and async
+from inspect import iscoroutinefunction
+from asgiref.sync import async_to_sync, sync_to_async
+
+class Task:
+    def call(self, *args, **kwargs):
+        if iscoroutinefunction(self.func):
+            return async_to_sync(self.func)(*args, **kwargs)
+        return self.func(*args, **kwargs)
+    
+    async def acall(self, *args, **kwargs):
+        if iscoroutinefunction(self.func):
+            return await self.func(*args, **kwargs)
+        return await sync_to_async(self.func)(*args, **kwargs)
+```
+
+<Tip>
+Async tasks are ideal for I/O-bound operations like API calls, file operations, or database queries.
+</Tip>
+
+## Common Patterns
+
+### Email Sending
+
+```python
+from django.core.mail import send_mail
+from django.tasks import task
+
+@task(queue_name="email", priority=5)
+def send_welcome_email(user_id):
+    from myapp.models import User
+    user = User.objects.get(pk=user_id)
+    
+    send_mail(
+        subject="Welcome to our site!",
+        message=f"Hello {user.username}, welcome!",
+        from_email="noreply@example.com",
+        recipient_list=[user.email],
+    )
+    return f"Email sent to {user.email}"
+
+# Usage in view
+def register_view(request):
+    user = create_user(request.POST)
+    send_welcome_email.enqueue(user_id=user.id)
+    return redirect('registration_complete')
+```
+
+### Report Generation
+
+```python
+@task(priority=10, queue_name="reports")
+def generate_report(report_id):
+    from myapp.models import Report
+    report = Report.objects.get(pk=report_id)
+    
+    # Generate report (could take minutes)
+    data = compile_report_data(report)
+    pdf = render_to_pdf(data)
+    
+    # Save to storage
+    report.file.save(f'report_{report_id}.pdf', pdf)
+    report.status = 'completed'
+    report.save()
+    
+    return f"Report {report_id} generated"
+```
+
+### Periodic Tasks
+
+```python
+from datetime import datetime, timedelta
+
+@task(queue_name="maintenance")
+def cleanup_old_data():
+    from myapp.models import TempData
+    cutoff = datetime.now() - timedelta(days=30)
+    deleted = TempData.objects.filter(created_at__lt=cutoff).delete()
+    return f"Deleted {deleted[0]} old records"
+
+# Schedule to run daily
+def schedule_cleanup():
+    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=2, minute=0, second=0)
+    
+    cleanup_old_data.using(run_after=tomorrow).enqueue()
+```
+
+## Best Practices
+
+<Tip>
+1. **Keep tasks idempotent**: Tasks should be safe to retry
+2. **Use task context**: For retry logic and attempt tracking
+3. **Set appropriate priorities**: High priority for user-facing tasks
+4. **Choose the right backend**: Redis for distributed systems, DB for simple setups
+5. **Handle errors gracefully**: Return meaningful error messages
+6. **Monitor task queues**: Watch for failed or stuck tasks
+7. **Use signals for logging**: Track task lifecycle events
+</Tip>
+
+<Warning>
+Tasks run outside the request-response cycle. Don't rely on request-specific context unless explicitly passed as arguments.
+</Warning>
+
+## Immediate Backend (Development)
+
+For development, use the immediate backend which executes tasks synchronously:
+
+```python
+# settings.py
+TASKS = {
+    'default': {
+        'BACKEND': 'django.tasks.backends.immediate.ImmediateBackend',
+    }
+}
+```
+
+<Note>
+The immediate backend executes tasks synchronously in the same process, useful for development and testing but not suitable for production.
+</Note>

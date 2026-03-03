@@ -1,0 +1,402 @@
+---
+title: 'Models'
+description: 'Define your data structure with Django ORM models and database fields'
+---
+
+## Overview
+
+Django models are Python classes that define the structure of your database tables. Each model maps to a single database table, and each attribute represents a database field.
+
+<Note>
+  Models are defined in `models.py` and use Django's ORM to abstract away database-specific SQL, making your code portable across different databases.
+</Note>
+
+## Creating Models
+
+Models inherit from `django.db.models.Model`. The `ModelBase` metaclass handles model creation and field registration:
+
+```python
+from django.db import models
+
+class Author(models.Model):
+    """Represents a book author"""
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    email = models.EmailField(unique=True)
+    birth_date = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['last_name', 'first_name']
+        verbose_name_plural = 'authors'
+    
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+    
+    def get_full_name(self):
+        return f"{self.first_name} {self.last_name}"
+```
+
+## Field Types
+
+From `django.db.models.fields`, Django provides comprehensive field types:
+
+### Common Fields
+
+```python
+class Book(models.Model):
+    # Text fields
+    title = models.CharField(max_length=200)  # Short text
+    description = models.TextField()           # Long text
+    isbn = models.SlugField(unique=True)       # URL-friendly text
+    
+    # Numeric fields
+    page_count = models.IntegerField()
+    price = models.DecimalField(max_digits=6, decimal_places=2)
+    rating = models.FloatField(default=0.0)
+    
+    # Date/time fields
+    published_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Boolean fields
+    is_published = models.BooleanField(default=False)
+    
+    # Special fields
+    cover_image = models.ImageField(upload_to='covers/')
+    pdf_file = models.FileField(upload_to='books/')
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False)
+```
+
+### Relationship Fields
+
+```python
+class Book(models.Model):
+    # Many-to-one: Multiple books can have the same author
+    author = models.ForeignKey(
+        Author,
+        on_delete=models.CASCADE,
+        related_name='books'
+    )
+    
+    # Many-to-many: Books can have multiple categories
+    categories = models.ManyToManyField(
+        'Category',
+        related_name='books',
+        blank=True
+    )
+    
+    # One-to-one: Each book has one ISBN record
+    isbn_detail = models.OneToOneField(
+        'ISBNDetail',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='book'
+    )
+```
+
+<Warning>
+  Always specify `on_delete` behavior for ForeignKey and OneToOneField. Common options: `CASCADE`, `SET_NULL`, `PROTECT`, `SET_DEFAULT`, `DO_NOTHING`.
+</Warning>
+
+## Field Options
+
+From the Field base class, common options include:
+
+```python
+class Article(models.Model):
+    title = models.CharField(
+        max_length=200,
+        unique=True,              # Must be unique in database
+        db_index=True,            # Create database index
+        verbose_name='Article Title',
+        help_text='Enter article title'
+    )
+    
+    content = models.TextField(
+        blank=True,               # Allow empty in forms
+        null=True,                # Allow NULL in database
+        default='',               # Default value
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('draft', 'Draft'),
+            ('published', 'Published'),
+            ('archived', 'Archived'),
+        ],
+        default='draft'
+    )
+```
+
+<Tip>
+  Use `blank=True` for form validation and `null=True` for database constraints. For text fields, prefer `blank=True` with `default=''` over `null=True`.
+</Tip>
+
+## Meta Options
+
+The `Meta` class configures model behavior. From `django.db.models.options.Options`:
+
+```python
+class Article(models.Model):
+    # ... fields ...
+    
+    class Meta:
+        # Database table name
+        db_table = 'blog_articles'
+        
+        # Default ordering
+        ordering = ['-published_date', 'title']
+        
+        # Unique together constraints
+        unique_together = [['author', 'slug']]
+        
+        # Composite indexes
+        indexes = [
+            models.Index(fields=['status', 'published_date']),
+            models.Index(fields=['-created_at']),
+        ]
+        
+        # Check constraints
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(page_count__gte=0),
+                name='page_count_positive'
+            ),
+        ]
+        
+        # Admin display
+        verbose_name = 'article'
+        verbose_name_plural = 'articles'
+        
+        # Permissions
+        permissions = [
+            ('can_publish', 'Can publish articles'),
+        ]
+        
+        # Abstract base class
+        abstract = False
+        
+        # Proxy model
+        proxy = False
+```
+
+## Model Managers
+
+Managers handle database queries. The default manager is `objects`:
+
+```python
+from django.db import models
+
+class PublishedManager(models.Manager):
+    """Custom manager for published articles"""
+    def get_queryset(self):
+        return super().get_queryset().filter(status='published')
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    status = models.CharField(max_length=20)
+    
+    # Default manager
+    objects = models.Manager()
+    
+    # Custom manager
+    published = PublishedManager()
+
+# Usage
+all_articles = Article.objects.all()
+published_articles = Article.published.all()
+```
+
+## Querying Models
+
+Django's ORM provides a powerful query API:
+
+```python
+# Create
+article = Article.objects.create(
+    title='Django Tutorial',
+    content='Learn Django basics'
+)
+
+# Retrieve
+article = Article.objects.get(pk=1)
+articles = Article.objects.filter(status='published')
+recent = Article.objects.filter(created_at__gte='2024-01-01')
+
+# Update
+Article.objects.filter(status='draft').update(status='published')
+article.title = 'Updated Title'
+article.save()
+
+# Delete
+article.delete()
+Article.objects.filter(status='archived').delete()
+
+# Complex queries with Q objects
+from django.db.models import Q
+
+articles = Article.objects.filter(
+    Q(status='published') | Q(status='featured')
+).exclude(
+    author__email__isnull=True
+).order_by('-created_at')
+
+# Aggregation
+from django.db.models import Count, Avg
+
+stats = Article.objects.aggregate(
+    total=Count('id'),
+    avg_rating=Avg('rating')
+)
+
+# Annotations
+articles = Author.objects.annotate(
+    num_books=Count('books')
+).filter(num_books__gt=5)
+```
+
+<Tip>
+  Use `select_related()` for forward ForeignKey relationships and `prefetch_related()` for reverse ForeignKey and ManyToMany to avoid N+1 query problems.
+</Tip>
+
+## Model Methods
+
+From `django.db.models.base.Model`, common methods include:
+
+```python
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    slug = models.SlugField()
+    
+    def save(self, *args, **kwargs):
+        """Override save to auto-generate slug"""
+        if not self.slug:
+            self.slug = slugify(self.title)
+        super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        """Override delete for custom cleanup"""
+        # Custom cleanup logic
+        super().delete(*args, **kwargs)
+    
+    def get_absolute_url(self):
+        """Return the URL to access this article"""
+        return reverse('article-detail', args=[str(self.id)])
+    
+    def clean(self):
+        """Validate model data"""
+        if self.page_count < 0:
+            raise ValidationError('Page count cannot be negative')
+```
+
+## Model Inheritance
+
+### Abstract Base Classes
+
+```python
+class TimeStampedModel(models.Model):
+    """Abstract base class with timestamp fields"""
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        abstract = True
+
+class Article(TimeStampedModel):
+    title = models.CharField(max_length=200)
+    # Inherits created_at and updated_at
+```
+
+### Multi-table Inheritance
+
+```python
+class Place(models.Model):
+    name = models.CharField(max_length=50)
+    address = models.CharField(max_length=80)
+
+class Restaurant(Place):
+    serves_hot_dogs = models.BooleanField(default=False)
+    serves_pizza = models.BooleanField(default=False)
+```
+
+### Proxy Models
+
+```python
+class Person(models.Model):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+
+class MyPerson(Person):
+    class Meta:
+        proxy = True
+    
+    def do_something(self):
+        # Custom method
+        pass
+```
+
+## Model Signals
+
+Django models emit signals for lifecycle events:
+
+```python
+from django.db.models.signals import pre_save, post_save, pre_delete
+from django.dispatch import receiver
+
+@receiver(post_save, sender=Article)
+def article_post_save(sender, instance, created, **kwargs):
+    if created:
+        # Article was just created
+        send_notification(f"New article: {instance.title}")
+    else:
+        # Article was updated
+        invalidate_cache(instance.id)
+
+@receiver(pre_delete, sender=Article)
+def article_pre_delete(sender, instance, **kwargs):
+    # Cleanup before deletion
+    instance.cover_image.delete()
+```
+
+<Warning>
+  Signals can impact performance. Use them judiciously and consider moving heavy operations to background tasks.
+</Warning>
+
+## Model Validation
+
+```python
+from django.core.exceptions import ValidationError
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    
+    def clean(self):
+        """Model-level validation"""
+        if 'forbidden' in self.title.lower():
+            raise ValidationError('Title contains forbidden words')
+        
+        if len(self.content) < 100:
+            raise ValidationError('Content must be at least 100 characters')
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()  # Run validation
+        super().save(*args, **kwargs)
+```
+
+## Best Practices
+
+1. **Use meaningful names**: Model names should be singular nouns
+2. **Add __str__ methods**: Make objects readable in admin and shell
+3. **Index frequently queried fields**: Use `db_index=True`
+4. **Use related_name**: Make reverse relationships clear
+5. **Validate data**: Use `clean()` method and field validators
+6. **Avoid large models**: Split into multiple models if needed
+
+## Next Steps
+
+- Explore [Views](/concepts/views) to work with model data
+- Learn about [Forms](/concepts/forms) for model form handling
+- Understand [URL Routing](/concepts/urls) for model-based URLs

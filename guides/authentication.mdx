@@ -1,0 +1,380 @@
+---
+title: Authentication Guide
+description: Learn how to implement user authentication in Django
+---
+
+# Authentication Guide
+
+Django provides a comprehensive authentication system out of the box. This guide covers user authentication, permissions, and session management.
+
+## Overview
+
+Django's authentication system handles both authentication and authorization:
+- **Authentication** verifies a user is who they claim to be
+- **Authorization** determines what an authenticated user is allowed to do
+
+## Basic Authentication
+
+<Steps>
+  <Step title="Configure Authentication Backends">
+    Django uses authentication backends defined in `settings.py`:
+    
+    ```python settings.py
+    AUTHENTICATION_BACKENDS = [
+        'django.contrib.auth.backends.ModelBackend',
+    ]
+    ```
+    
+    The `ModelBackend` authenticates against the database using username and password.
+  </Step>
+  
+  <Step title="Authenticate Users">
+    Use the `authenticate()` function from `django.contrib.auth`:
+    
+    ```python views.py
+    from django.contrib.auth import authenticate, login
+    
+    def login_view(request):
+        username = request.POST['username']
+        password = request.POST['password']
+        
+        # Authenticate returns User object if credentials are valid
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            # Log the user in
+            login(request, user)
+            return redirect('dashboard')
+        else:
+            return render(request, 'login.html', {
+                'error': 'Invalid credentials'
+            })
+    ```
+    
+    The `authenticate()` function checks credentials against all configured authentication backends.
+  </Step>
+  
+  <Step title="Log Users In">
+    The `login()` function persists authentication in the session:
+    
+    ```python
+    from django.contrib.auth import login
+    
+    # This sets session keys:
+    # - _auth_user_id: user's primary key
+    # - _auth_user_backend: backend path
+    # - _auth_user_hash: session validation hash
+    login(request, user)
+    ```
+  </Step>
+  
+  <Step title="Log Users Out">
+    Use `logout()` to clear the session:
+    
+    ```python views.py
+    from django.contrib.auth import logout
+    
+    def logout_view(request):
+        logout(request)
+        return redirect('home')
+    ```
+  </Step>
+</Steps>
+
+## User Model
+
+The default User model provides these fields:
+
+```python
+from django.contrib.auth.models import User
+
+# Fields available on User:
+user.username        # Required, 150 chars max
+user.first_name      # Optional, 150 chars max
+user.last_name       # Optional, 150 chars max
+user.email           # Optional
+user.password        # Hashed password
+user.is_staff        # Can access admin site
+user.is_active       # Account is active
+user.is_superuser    # Has all permissions
+user.last_login      # DateTime of last login
+user.date_joined     # DateTime when account was created
+```
+
+### Creating Users
+
+```python
+from django.contrib.auth.models import User
+
+# Create regular user
+user = User.objects.create_user(
+    username='john',
+    email='john@example.com',
+    password='secret123'  # Will be hashed automatically
+)
+
+# Create superuser
+superuser = User.objects.create_superuser(
+    username='admin',
+    email='admin@example.com',
+    password='admin123'
+)
+```
+
+<Note>
+  Always use `create_user()` or `create_superuser()` instead of `create()` to ensure passwords are properly hashed.
+</Note>
+
+## Permissions and Authorization
+
+### Checking Permissions
+
+```python
+from django.contrib.auth.models import User, Permission
+
+user = User.objects.get(username='john')
+
+# Check single permission
+if user.has_perm('app_label.permission_codename'):
+    # User has permission
+    pass
+
+# Check multiple permissions
+if user.has_perms(['app_label.add_post', 'app_label.change_post']):
+    # User has all permissions
+    pass
+
+# Check module permissions
+if user.has_module_perms('blog'):
+    # User has any permission in the blog app
+    pass
+```
+
+### Using Permission Decorators
+
+```python views.py
+from django.contrib.auth.decorators import login_required, permission_required
+
+@login_required
+def profile_view(request):
+    """Only accessible to authenticated users"""
+    return render(request, 'profile.html')
+
+@login_required(login_url='/accounts/login/')
+def dashboard_view(request):
+    """Redirect to custom login URL"""
+    return render(request, 'dashboard.html')
+
+@permission_required('blog.add_post', raise_exception=True)
+def create_post_view(request):
+    """Requires specific permission, raises 403 if denied"""
+    return render(request, 'create_post.html')
+```
+
+### Custom Permission Checks
+
+```python views.py
+from django.contrib.auth.decorators import user_passes_test
+
+def is_premium_user(user):
+    return user.is_authenticated and hasattr(user, 'profile') and user.profile.is_premium
+
+@user_passes_test(is_premium_user)
+def premium_content_view(request):
+    return render(request, 'premium.html')
+```
+
+## Groups
+
+Groups allow you to apply permissions to multiple users:
+
+```python
+from django.contrib.auth.models import Group, Permission
+
+# Create a group
+editors = Group.objects.create(name='Editors')
+
+# Add permissions to group
+can_publish = Permission.objects.get(codename='publish_post')
+editors.permissions.add(can_publish)
+
+# Add user to group
+user.groups.add(editors)
+
+# User now has all permissions from the Editors group
+user.has_perm('blog.publish_post')  # True
+```
+
+## Session Management
+
+### Updating Session After Password Change
+
+```python views.py
+from django.contrib.auth import update_session_auth_hash
+
+def change_password_view(request):
+    if request.method == 'POST':
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            # Update session to prevent logout
+            update_session_auth_hash(request, user)
+            return redirect('profile')
+    else:
+        form = PasswordChangeForm(request.user)
+    return render(request, 'change_password.html', {'form': form})
+```
+
+<Warning>
+  Without calling `update_session_auth_hash()`, changing a password will log out all of the user's sessions.
+</Warning>
+
+## Async Authentication
+
+Django supports async authentication for ASGI applications:
+
+```python views.py
+from django.contrib.auth import aauthenticate, alogin, alogout
+
+async def async_login_view(request):
+    username = request.POST['username']
+    password = request.POST['password']
+    
+    # Async authenticate
+    user = await aauthenticate(request, username=username, password=password)
+    
+    if user is not None:
+        await alogin(request, user)
+        return redirect('dashboard')
+    
+    return render(request, 'login.html', {'error': 'Invalid credentials'})
+
+async def async_logout_view(request):
+    await alogout(request)
+    return redirect('home')
+```
+
+## Custom User Model
+
+To use a custom user model, define it in your app:
+
+```python models.py
+from django.contrib.auth.models import AbstractUser
+
+class CustomUser(AbstractUser):
+    bio = models.TextField(blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'users'
+```
+
+Then configure it in settings:
+
+```python settings.py
+AUTH_USER_MODEL = 'myapp.CustomUser'
+```
+
+<Note>
+  Set `AUTH_USER_MODEL` before creating any migrations. Changing it later requires complex database migrations.
+</Note>
+
+## Best Practices
+
+<Steps>
+  <Step title="Never Store Plain Passwords">
+    Django automatically hashes passwords when using `create_user()` or `set_password()`:
+    
+    ```python
+    # Good
+    user.set_password('new_password')
+    user.save()
+    
+    # Bad - stores plain text!
+    user.password = 'new_password'
+    user.save()
+    ```
+  </Step>
+  
+  <Step title="Use Login Required Decorators">
+    Protect views that require authentication:
+    
+    ```python
+    from django.contrib.auth.decorators import login_required
+    
+    @login_required
+    def protected_view(request):
+        return render(request, 'protected.html')
+    ```
+  </Step>
+  
+  <Step title="Implement Proper Permission Checks">
+    Check permissions before allowing operations:
+    
+    ```python
+    if not request.user.has_perm('blog.delete_post'):
+        raise PermissionDenied
+    ```
+  </Step>
+  
+  <Step title="Use HTTPS in Production">
+    Always use HTTPS to protect authentication credentials in transit:
+    
+    ```python settings.py
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    ```
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Redirect After Login
+
+```python views.py
+from django.contrib.auth import login
+from django.shortcuts import redirect
+
+def login_view(request):
+    if request.method == 'POST':
+        # ... authenticate user ...
+        if user is not None:
+            login(request, user)
+            # Redirect to 'next' parameter or default page
+            next_url = request.GET.get('next', 'dashboard')
+            return redirect(next_url)
+```
+
+### Check Authentication in Templates
+
+```django template.html
+{% if user.is_authenticated %}
+    <p>Welcome, {{ user.username }}!</p>
+    <a href="{% url 'logout' %}">Logout</a>
+{% else %}
+    <a href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% if user.is_staff %}
+    <a href="{% url 'admin:index' %}">Admin Panel</a>
+{% endif %}
+```
+
+### Anonymous User
+
+```python
+# request.user is always set, even for anonymous users
+if request.user.is_authenticated:
+    # Regular user
+    print(request.user.username)
+else:
+    # AnonymousUser instance
+    print(request.user.is_authenticated)  # False
+```
+
+## Related Resources
+
+- [User Model API Reference](/api-reference/models/user)
+- [Authentication Backends](/api-reference/auth/backends)
+- [Permission System](/api-reference/auth/permissions)

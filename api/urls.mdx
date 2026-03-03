@@ -1,0 +1,461 @@
+---
+title: 'URL Configuration'
+description: 'Django URL routing and URL pattern matching API reference'
+---
+
+## URL Pattern Functions
+
+### path()
+
+Define a URL pattern using simplified routing syntax.
+
+```python
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('articles/', views.article_list, name='article-list'),
+    path('articles/<int:id>/', views.article_detail, name='article-detail'),
+    path('articles/<slug:slug>/', views.article_by_slug, name='article-slug'),
+]
+```
+
+**Signature:**
+
+```python
+path(route, view, kwargs=None, name=None)
+```
+
+<ParamField name="route" type="str" required>
+  URL pattern string with optional path converters like `<int:id>` or `<slug:slug>`
+</ParamField>
+
+<ParamField name="view" type="callable | class" required>
+  A view function or the result of `as_view()` for class-based views. Can also be an `include()` for nested URL patterns.
+</ParamField>
+
+<ParamField name="kwargs" type="dict" optional>
+  Extra keyword arguments to pass to the view function
+</ParamField>
+
+<ParamField name="name" type="str" optional>
+  A unique name for the URL pattern, used with `reverse()` for URL resolution
+</ParamField>
+
+**Returns:** `URLPattern` instance
+
+---
+
+### re_path()
+
+Define a URL pattern using regular expressions.
+
+```python
+from django.urls import re_path
+from . import views
+
+urlpatterns = [
+    re_path(r'^articles/(?P<year>[0-9]{4})/$', views.year_archive),
+    re_path(r'^articles/(?P<year>[0-9]{4})/(?P<month>[0-9]{2})/$', views.month_archive),
+]
+```
+
+**Signature:**
+
+```python
+re_path(route, view, kwargs=None, name=None)
+```
+
+<ParamField name="route" type="str" required>
+  Regular expression pattern string. Use named capture groups like `(?P<name>pattern)` to capture URL parameters.
+</ParamField>
+
+<ParamField name="view" type="callable | class" required>
+  A view function or the result of `as_view()` for class-based views
+</ParamField>
+
+<ParamField name="kwargs" type="dict" optional>
+  Extra keyword arguments to pass to the view function
+</ParamField>
+
+<ParamField name="name" type="str" optional>
+  A unique name for the URL pattern
+</ParamField>
+
+**Returns:** `URLPattern` instance
+
+---
+
+### include()
+
+Include another URLconf module or a list of URL patterns.
+
+```python
+from django.urls import include, path
+
+urlpatterns = [
+    path('blog/', include('blog.urls')),
+    path('api/', include('api.urls', namespace='api')),
+    path('shop/', include([
+        path('', views.shop_index),
+        path('products/', views.product_list),
+    ])),
+]
+```
+
+**Signature:**
+
+```python
+include(arg, namespace=None)
+```
+
+<ParamField name="arg" type="str | module | tuple | list" required>
+  Can be:
+  - A string path to a URLconf module (e.g., `'blog.urls'`)
+  - A module object containing `urlpatterns`
+  - A list/tuple of URL patterns
+  - A tuple of `(urlpatterns, app_name)` for providing app namespace
+</ParamField>
+
+<ParamField name="namespace" type="str" optional>
+  Instance namespace for the included URLs. Requires `app_name` to be set.
+</ParamField>
+
+**Returns:** Tuple of `(urlconf_module, app_name, namespace)`
+
+---
+
+## URL Converters
+
+Path converters extract typed values from URL paths.
+
+### Built-in Converters
+
+#### int
+
+Matches integers (including zero). Returns a Python `int`.
+
+```python
+path('articles/<int:id>/', views.article_detail)
+# Matches: /articles/123/
+# view receives: id=123 (int)
+```
+
+**Regex:** `[0-9]+`
+
+---
+
+#### str
+
+Matches any non-empty string, excluding the path separator `/`. Returns a Python `str`. This is the default if no converter is specified.
+
+```python
+path('users/<str:username>/', views.user_profile)
+# Matches: /users/john_doe/
+# view receives: username='john_doe' (str)
+```
+
+**Regex:** `[^/]+`
+
+---
+
+#### slug
+
+Matches a slug string consisting of ASCII letters, numbers, hyphens, and underscores. Returns a Python `str`.
+
+```python
+path('articles/<slug:slug>/', views.article_detail)
+# Matches: /articles/hello-world-2024/
+# view receives: slug='hello-world-2024' (str)
+```
+
+**Regex:** `[-a-zA-Z0-9_]+`
+
+---
+
+#### uuid
+
+Matches a UUID string. Returns a Python `uuid.UUID` instance.
+
+```python
+path('objects/<uuid:id>/', views.object_detail)
+# Matches: /objects/550e8400-e29b-41d4-a716-446655440000/
+# view receives: id=UUID('550e8400-e29b-41d4-a716-446655440000')
+```
+
+**Regex:** `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
+
+---
+
+#### path
+
+Matches any non-empty string, including the path separator `/`. This allows matching a complete path. Returns a Python `str`.
+
+```python
+path('files/<path:filepath>/', views.serve_file)
+# Matches: /files/documents/2024/report.pdf
+# view receives: filepath='documents/2024/report.pdf' (str)
+```
+
+**Regex:** `.+`
+
+---
+
+### Custom Converters
+
+Create custom path converters by defining a class with `regex`, `to_python()`, and `to_url()` attributes/methods.
+
+```python
+from django.urls import path, register_converter
+
+class FourDigitYearConverter:
+    regex = '[0-9]{4}'
+    
+    def to_python(self, value):
+        return int(value)
+    
+    def to_url(self, value):
+        return '%04d' % value
+
+register_converter(FourDigitYearConverter, 'yyyy')
+
+urlpatterns = [
+    path('articles/<yyyy:year>/', views.year_archive),
+]
+```
+
+**Converter Requirements:**
+
+<ResponseField name="regex" type="str" required>
+  Regular expression string to match the path segment
+</ResponseField>
+
+<ResponseField name="to_python(value)" type="method" required>
+  Convert the matched string to the appropriate Python type. Receives the matched string and should return the converted value.
+</ResponseField>
+
+<ResponseField name="to_url(value)" type="method" required>
+  Convert the Python value back to a string for URL generation. Used by `reverse()`.
+</ResponseField>
+
+#### register_converter()
+
+Register a custom path converter.
+
+```python
+register_converter(converter, type_name)
+```
+
+<ParamField name="converter" type="class" required>
+  The converter class to register
+</ParamField>
+
+<ParamField name="type_name" type="str" required>
+  The name to use in path patterns (e.g., `'yyyy'` for `<yyyy:year>`)
+</ParamField>
+
+---
+
+## URL Reversal
+
+### reverse()
+
+Reverse-resolve a URL from its name and arguments.
+
+```python
+from django.urls import reverse
+
+# Basic reversal
+url = reverse('article-list')
+# Returns: '/articles/'
+
+# With positional args
+url = reverse('article-detail', args=[123])
+# Returns: '/articles/123/'
+
+# With keyword args
+url = reverse('article-detail', kwargs={'id': 123})
+# Returns: '/articles/123/'
+
+# With namespace
+url = reverse('blog:article-detail', kwargs={'id': 123})
+# Returns: '/blog/articles/123/'
+
+# With query parameters
+url = reverse('article-list', query={'page': 2, 'sort': 'date'})
+# Returns: '/articles/?page=2&sort=date'
+
+# With fragment
+url = reverse('article-detail', args=[123], fragment='comments')
+# Returns: '/articles/123/#comments'
+```
+
+**Signature:**
+
+```python
+reverse(viewname, urlconf=None, args=None, kwargs=None, current_app=None, *, query=None, fragment=None)
+```
+
+<ParamField name="viewname" type="str | callable" required>
+  The URL name (string) or view callable. Use colon syntax for namespaced URLs: `'namespace:name'`
+</ParamField>
+
+<ParamField name="urlconf" type="str" optional>
+  The URLconf module to use. Defaults to the ROOT_URLCONF setting.
+</ParamField>
+
+<ParamField name="args" type="list" optional>
+  Positional arguments for the URL pattern
+</ParamField>
+
+<ParamField name="kwargs" type="dict" optional>
+  Keyword arguments for the URL pattern
+</ParamField>
+
+<ParamField name="current_app" type="str" optional>
+  Hint for resolving namespaced URLs from the current app
+</ParamField>
+
+<ParamField name="query" type="dict | QueryDict" optional>
+  Query parameters to append to the URL
+</ParamField>
+
+<ParamField name="fragment" type="str" optional>
+  Fragment identifier (anchor) to append to the URL
+</ParamField>
+
+**Returns:** String URL path
+
+**Raises:**
+- `NoReverseMatch` - If URL cannot be reversed with the given parameters
+
+---
+
+### reverse_lazy()
+
+Lazy version of `reverse()` that doesn't evaluate until the value is needed. Useful in class-based views and module-level URLconf.
+
+```python
+from django.urls import reverse_lazy
+
+class ArticleDeleteView(DeleteView):
+    model = Article
+    success_url = reverse_lazy('article-list')
+```
+
+**Signature:** Same as `reverse()`
+
+**Returns:** Lazy string that evaluates to URL when coerced to string
+
+---
+
+## URL Resolution
+
+### resolve()
+
+Resolve a URL path to a view function and its arguments.
+
+```python
+from django.urls import resolve
+
+match = resolve('/articles/123/')
+print(match.view_name)  # 'article-detail'
+print(match.kwargs)     # {'id': 123}
+print(match.url_name)   # 'article-detail'
+print(match.namespace)  # '' or 'blog' if namespaced
+```
+
+**Signature:**
+
+```python
+resolve(path, urlconf=None)
+```
+
+<ParamField name="path" type="str" required>
+  The URL path to resolve
+</ParamField>
+
+<ParamField name="urlconf" type="str" optional>
+  The URLconf module to use
+</ParamField>
+
+**Returns:** `ResolverMatch` object with attributes:
+
+<ResponseField name="func" type="callable">
+  The view function that would handle the request
+</ResponseField>
+
+<ResponseField name="args" type="tuple">
+  Positional arguments extracted from the URL
+</ResponseField>
+
+<ResponseField name="kwargs" type="dict">
+  Keyword arguments extracted from the URL
+</ResponseField>
+
+<ResponseField name="url_name" type="str">
+  The name of the matched URL pattern
+</ResponseField>
+
+<ResponseField name="namespace" type="str">
+  The namespace of the matched URL pattern
+</ResponseField>
+
+<ResponseField name="view_name" type="str">
+  The full name including namespace (e.g., `'blog:article-detail'`)
+</ResponseField>
+
+**Raises:**
+- `Resolver404` - If the path cannot be resolved
+
+---
+
+## URL Configuration
+
+### Namespace Patterns
+
+Organize URLs with app and instance namespaces:
+
+```python
+# blog/urls.py
+from django.urls import path
+from . import views
+
+app_name = 'blog'  # Application namespace
+
+urlpatterns = [
+    path('', views.index, name='index'),
+    path('posts/', views.post_list, name='post-list'),
+]
+
+# project/urls.py
+from django.urls import include, path
+
+urlpatterns = [
+    path('blog/', include('blog.urls')),
+    # With instance namespace:
+    path('news/', include('blog.urls', namespace='news')),
+]
+
+# Usage
+reverse('blog:index')  # '/blog/'
+reverse('news:index')  # '/news/'
+```
+
+### URL Parameters
+
+Pass extra parameters to views:
+
+```python
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('archive/', views.archive, {'year': 2024}, name='archive-default'),
+]
+
+# View receives both URL params and extra kwargs
+def archive(request, year):
+    # year = 2024
+    pass
+```

@@ -1,0 +1,817 @@
+---
+title: QuerySet API Reference
+description: Complete API reference for Django QuerySet methods
+---
+
+# QuerySet API
+
+A QuerySet represents a collection of objects from your database. It can have zero, one or many filters that narrow down the collection based on parameters.
+
+## Methods that Return New QuerySets
+
+These methods return a new QuerySet, allowing you to chain them together.
+
+### filter()
+
+Returns a new QuerySet containing objects that match the given lookup parameters.
+
+```python
+Entry.objects.filter(pub_date__year=2024)
+Entry.objects.filter(headline__startswith='What')
+```
+
+<ParamField path="**kwargs" type="dict">
+  Lookup parameters for filtering.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A new QuerySet instance with the filter applied.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1624`
+
+### exclude()
+
+Returns a new QuerySet containing objects that do NOT match the given lookup parameters.
+
+```python
+Entry.objects.exclude(pub_date__gt=datetime.date(2024, 1, 3))
+```
+
+<ParamField path="**kwargs" type="dict">
+  Lookup parameters for exclusion.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A new QuerySet instance with the exclusion applied.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1632`
+
+### annotate()
+
+Annotates each object in the QuerySet with the provided expressions.
+
+```python
+from django.db.models import Count
+Blog.objects.annotate(number_of_entries=Count('entry'))
+```
+
+<ParamField path="*args" type="Expression">
+  Expressions to annotate with. Must have a default_alias.
+</ParamField>
+
+<ParamField path="**kwargs" type="Expression">
+  Named expressions to annotate with.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A new QuerySet with annotations.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1782`
+
+### alias()
+
+Adds annotations without adding them to the SELECT clause. Useful for filtering/ordering by computed values without retrieving them.
+
+```python
+from django.db.models import Count
+Blog.objects.alias(num_entries=Count('entry')).filter(num_entries__gt=5)
+```
+
+<ParamField path="*args" type="Expression">
+  Expressions to alias.
+</ParamField>
+
+<ParamField path="**kwargs" type="Expression">
+  Named expressions to alias.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A new QuerySet with aliases.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1790`
+
+### order_by()
+
+Returns a new QuerySet with the specified ordering.
+
+```python
+Entry.objects.order_by('-pub_date', 'headline')
+Entry.objects.order_by('?')  # Random order
+```
+
+<ParamField path="*field_names" type="str">
+  Field names to order by. Prefix with '-' for descending order.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A new QuerySet with the specified ordering.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1855`
+
+### reverse()
+
+Returns the QuerySet with the ordering reversed.
+
+```python
+Entry.objects.order_by('pub_date').reverse()
+```
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet with reversed ordering.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1894`
+
+### distinct()
+
+Returns a new QuerySet that uses SELECT DISTINCT in its SQL query.
+
+```python
+Entry.objects.distinct()
+Entry.objects.order_by('pub_date').distinct('pub_date')
+```
+
+<ParamField path="*field_names" type="str" optional>
+  On PostgreSQL, you can specify field names to make distinct on specific fields.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A new QuerySet with DISTINCT applied.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1864`
+
+### values()
+
+Returns a QuerySet that returns dictionaries instead of model instances.
+
+```python
+Blog.objects.values('id', 'name')
+```
+
+<ParamField path="*fields" type="str">
+  Field names to include in the dictionary.
+</ParamField>
+
+<ParamField path="**expressions" type="Expression">
+  Expressions to include in the dictionary.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet that returns dictionaries.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1488`
+
+### values_list()
+
+Returns a QuerySet that returns tuples instead of model instances.
+
+```python
+Entry.objects.values_list('id', 'headline')
+Entry.objects.values_list('id', flat=True)  # Returns single values
+Entry.objects.values_list('id', 'headline', named=True)  # Returns namedtuples
+```
+
+<ParamField path="*fields" type="str">
+  Field names to include in the tuple.
+</ParamField>
+
+<ParamField path="flat" type="bool" default="False">
+  If True and only one field is specified, return single values instead of 1-tuples.
+</ParamField>
+
+<ParamField path="named" type="bool" default="False">
+  If True, return namedtuples instead of regular tuples.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet that returns tuples.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1494`
+
+### select_related()
+
+Returns a QuerySet that will follow foreign-key relationships and load related objects in the initial query.
+
+```python
+Entry.objects.select_related('blog')
+Entry.objects.select_related('blog__author')
+```
+
+<ParamField path="*fields" type="str" optional>
+  Field names to follow. If not provided, follows all non-null foreign keys.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet with related objects pre-loaded.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1733`
+
+### prefetch_related()
+
+Returns a QuerySet that will automatically retrieve related objects in a separate query.
+
+```python
+Blog.objects.prefetch_related('entry_set')
+Restaurant.objects.prefetch_related('pizzas__toppings')
+```
+
+<ParamField path="*lookups" type="str | Prefetch">
+  Lookups to prefetch. Can be strings or Prefetch objects.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet that will prefetch related objects.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1757`
+
+### select_for_update()
+
+Returns a QuerySet that will lock rows until the end of the transaction.
+
+```python
+Entry.objects.select_for_update()
+Entry.objects.select_for_update(nowait=True)
+Entry.objects.select_for_update(skip_locked=True)
+```
+
+<ParamField path="nowait" type="bool" default="False">
+  If True, raises DatabaseError if a lock cannot be acquired immediately.
+</ParamField>
+
+<ParamField path="skip_locked" type="bool" default="False">
+  If True, skips locked rows instead of blocking.
+</ParamField>
+
+<ParamField path="of" type="tuple" default="()">
+  Limit locking to specific tables in multi-table queries.
+</ParamField>
+
+<ParamField path="no_key" type="bool" default="False">
+  Use FOR NO KEY UPDATE lock mode (PostgreSQL only).
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet that will lock selected rows.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1717`
+
+### defer()
+
+Defers loading of specified fields until they are accessed.
+
+```python
+Entry.objects.defer('headline', 'body')
+```
+
+<ParamField path="*fields" type="str">
+  Field names to defer loading.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet with deferred fields.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1902`
+
+### only()
+
+Opposite of defer(). Only loads the specified fields immediately.
+
+```python
+Entry.objects.only('headline', 'pub_date')
+```
+
+<ParamField path="*fields" type="str">
+  Field names to load immediately.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet that only loads specified fields.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1919`
+
+### using()
+
+Selects which database the QuerySet should execute against.
+
+```python
+Entry.objects.using('replica')
+```
+
+<ParamField path="alias" type="str">
+  The alias of the database to use.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet bound to the specified database.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1940`
+
+### all()
+
+Returns a copy of the current QuerySet.
+
+```python
+Entry.objects.all()
+```
+
+<ResponseField name="return" type="QuerySet">
+  A copy of the QuerySet.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1617`
+
+### union()
+
+Combines the results of two or more QuerySets using SQL UNION.
+
+```python
+qs1.union(qs2, qs3)
+qs1.union(qs2, all=True)  # UNION ALL
+```
+
+<ParamField path="*other_qs" type="QuerySet">
+  Other QuerySets to union with.
+</ParamField>
+
+<ParamField path="all" type="bool" default="False">
+  If True, uses UNION ALL instead of UNION.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A combined QuerySet.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1689`
+
+### intersection()
+
+Combines the results using SQL INTERSECT.
+
+```python
+qs1.intersection(qs2, qs3)
+```
+
+<ParamField path="*other_qs" type="QuerySet">
+  Other QuerySets to intersect with.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet containing only common results.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1702`
+
+### difference()
+
+Combines the results using SQL EXCEPT/DIFFERENCE.
+
+```python
+qs1.difference(qs2)
+```
+
+<ParamField path="*other_qs" type="QuerySet">
+  Other QuerySets to subtract.
+</ParamField>
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet with results from first QuerySet that are not in others.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1711`
+
+### none()
+
+Returns an empty QuerySet that will always return an empty list.
+
+```python
+Entry.objects.none()
+```
+
+<ResponseField name="return" type="QuerySet">
+  An empty QuerySet.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1607`
+
+## Methods that Do Not Return QuerySets
+
+These methods execute the query and return other types of data.
+
+### get()
+
+Returns a single object matching the given lookup parameters.
+
+```python
+Entry.objects.get(pk=1)
+Entry.objects.get(headline='First entry')
+```
+
+<ParamField path="**kwargs" type="dict">
+  Lookup parameters.
+</ParamField>
+
+<ResponseField name="return" type="Model">
+  The model instance matching the query.
+</ResponseField>
+
+<ResponseField name="raises" type="DoesNotExist">
+  If no object is found.
+</ResponseField>
+
+<ResponseField name="raises" type="MultipleObjectsReturned">
+  If more than one object is found.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:636`
+
+### create()
+
+Creates a new object and saves it in a single step.
+
+```python
+Entry.objects.create(headline='New entry', pub_date=datetime.date.today())
+```
+
+<ParamField path="**kwargs" type="dict">
+  Field values for the new object.
+</ParamField>
+
+<ResponseField name="return" type="Model">
+  The created model instance.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:674`
+
+### get_or_create()
+
+Looks up an object with the given kwargs, creating one if necessary.
+
+```python
+obj, created = Entry.objects.get_or_create(
+    headline='New entry',
+    defaults={'pub_date': datetime.date.today()}
+)
+```
+
+<ParamField path="defaults" type="dict" optional>
+  Values to use when creating a new object.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Lookup parameters.
+</ParamField>
+
+<ResponseField name="return" type="tuple[Model, bool]">
+  A tuple of (object, created) where created is a boolean.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:998`
+
+### update_or_create()
+
+Looks up an object with the given kwargs, updating or creating one if necessary.
+
+```python
+obj, created = Entry.objects.update_or_create(
+    headline='Existing entry',
+    defaults={'pub_date': datetime.date.today()}
+)
+```
+
+<ParamField path="defaults" type="dict" optional>
+  Values to use when updating or creating.
+</ParamField>
+
+<ParamField path="create_defaults" type="dict" optional>
+  Values to use only when creating (not updating).
+</ParamField>
+
+<ParamField path="**kwargs" type="dict">
+  Lookup parameters.
+</ParamField>
+
+<ResponseField name="return" type="tuple[Model, bool]">
+  A tuple of (object, created) where created is a boolean.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1033`
+
+### bulk_create()
+
+Inserts a list of objects into the database efficiently.
+
+```python
+Entry.objects.bulk_create([
+    Entry(headline='Entry 1'),
+    Entry(headline='Entry 2'),
+])
+```
+
+<ParamField path="objs" type="list[Model]">
+  List of model instances to create.
+</ParamField>
+
+<ParamField path="batch_size" type="int" optional>
+  Number of objects to create in each batch.
+</ParamField>
+
+<ParamField path="ignore_conflicts" type="bool" default="False">
+  If True, ignores database errors for conflicting rows.
+</ParamField>
+
+<ParamField path="update_conflicts" type="bool" default="False">
+  If True, performs an upsert when conflicts occur.
+</ParamField>
+
+<ParamField path="update_fields" type="list[str]" optional>
+  Fields to update when update_conflicts=True.
+</ParamField>
+
+<ParamField path="unique_fields" type="list[str]" optional>
+  Fields that define uniqueness for conflict detection.
+</ParamField>
+
+<ResponseField name="return" type="list[Model]">
+  The created objects (may not have primary keys set depending on database).
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:771`
+
+### bulk_update()
+
+Updates specified fields on the provided model instances efficiently.
+
+```python
+entries = Entry.objects.all()[:10]
+for entry in entries:
+    entry.headline = 'Updated'
+Entry.objects.bulk_update(entries, ['headline'])
+```
+
+<ParamField path="objs" type="list[Model]">
+  List of model instances to update.
+</ParamField>
+
+<ParamField path="fields" type="list[str]">
+  Field names to update.
+</ParamField>
+
+<ParamField path="batch_size" type="int" optional>
+  Number of objects to update in each batch.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Number of rows updated.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:929`
+
+### count()
+
+Returns an integer representing the number of objects in the database matching the QuerySet.
+
+```python
+Entry.objects.count()
+Entry.objects.filter(headline__startswith='What').count()
+```
+
+<ResponseField name="return" type="int">
+  The count of objects.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:620`
+
+### first()
+
+Returns the first object matched by the queryset, or None if there is no matching object.
+
+```python
+Entry.objects.order_by('pub_date').first()
+```
+
+<ResponseField name="return" type="Model | None">
+  The first object or None.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1159`
+
+### last()
+
+Returns the last object matched by the queryset, or None.
+
+```python
+Entry.objects.order_by('pub_date').last()
+```
+
+<ResponseField name="return" type="Model | None">
+  The last object or None.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1172`
+
+### earliest()
+
+Returns the earliest object in the table based on the given field(s).
+
+```python
+Entry.objects.earliest('pub_date')
+```
+
+<ParamField path="*field_names" type="str">
+  Fields to order by. Uses model's Meta.get_latest_by if not provided.
+</ParamField>
+
+<ResponseField name="return" type="Model">
+  The earliest object.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1139`
+
+### latest()
+
+Returns the latest object in the table based on the given field(s).
+
+```python
+Entry.objects.latest('pub_date')
+```
+
+<ParamField path="*field_names" type="str">
+  Fields to order by. Uses model's Meta.get_latest_by if not provided.
+</ParamField>
+
+<ResponseField name="return" type="Model">
+  The latest object.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1147`
+
+### exists()
+
+Returns True if the QuerySet contains any results, False otherwise.
+
+```python
+if Entry.objects.filter(pub_date__year=2024).exists():
+    print('There are entries from 2024')
+```
+
+<ResponseField name="return" type="bool">
+  True if any results exist.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1407`
+
+### contains()
+
+Returns True if the QuerySet contains the given object.
+
+```python
+entry = Entry.objects.get(pk=1)
+Entry.objects.filter(pub_date__year=2024).contains(entry)
+```
+
+<ParamField path="obj" type="Model">
+  The object to check for.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the object is in the QuerySet.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1418`
+
+### update()
+
+Performs an SQL update query for the specified fields and returns the number of rows matched.
+
+```python
+Entry.objects.filter(pub_date__year=2024).update(headline='Updated')
+```
+
+<ParamField path="**kwargs" type="dict">
+  Field names and values to update.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Number of rows updated.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1337`
+
+### delete()
+
+Deletes the records in the current QuerySet.
+
+```python
+Entry.objects.filter(pub_date__year=2024).delete()
+```
+
+<ResponseField name="return" type="tuple[int, dict]">
+  A tuple containing the number of objects deleted and a dictionary with the number of deletions per object type.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1287`
+
+### aggregate()
+
+Returns a dictionary of aggregate values calculated over the QuerySet.
+
+```python
+from django.db.models import Avg, Max
+Entry.objects.aggregate(Avg('rating'), Max('pub_date'))
+```
+
+<ParamField path="*args" type="Expression">
+  Aggregation expressions.
+</ParamField>
+
+<ParamField path="**kwargs" type="Expression">
+  Named aggregation expressions.
+</ParamField>
+
+<ResponseField name="return" type="dict">
+  Dictionary of aggregate results.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:592`
+
+### in_bulk()
+
+Returns a dictionary mapping each ID to its corresponding object.
+
+```python
+Entry.objects.in_bulk([1, 2, 3])
+Entry.objects.in_bulk(field_name='headline')
+```
+
+<ParamField path="id_list" type="list" optional>
+  List of IDs to retrieve. If not provided, retrieves all objects.
+</ParamField>
+
+<ParamField path="field_name" type="str" default="'pk'">
+  Field to use as the dictionary key.
+</ParamField>
+
+<ResponseField name="return" type="dict">
+  Dictionary mapping field values to objects.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1185`
+
+### iterator()
+
+Evaluates the QuerySet and returns an iterator over the results.
+
+```python
+for entry in Entry.objects.iterator():
+    process(entry)
+
+for entry in Entry.objects.iterator(chunk_size=100):
+    process(entry)
+```
+
+<ParamField path="chunk_size" type="int" default="2000">
+  Number of rows to fetch from the database at once.
+</ParamField>
+
+<ResponseField name="return" type="Iterator[Model]">
+  An iterator over model instances.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:537`
+
+### explain()
+
+Returns the execution plan for the QuerySet's query.
+
+```python
+print(Entry.objects.filter(headline='test').explain())
+print(Entry.objects.filter(headline='test').explain(verbose=True))
+```
+
+<ParamField path="format" type="str" optional>
+  Format for the output (database-specific).
+</ParamField>
+
+<ParamField path="**options" type="dict">
+  Database-specific options.
+</ParamField>
+
+<ResponseField name="return" type="str">
+  The query execution plan.
+</ResponseField>
+
+**Reference:** `django/db/models/query.py:1447`

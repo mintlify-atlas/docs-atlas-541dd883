@@ -1,0 +1,659 @@
+---
+title: Form Widgets
+description: HTML widgets for rendering form fields with customization options
+---
+
+## Base Widget Class
+
+All widgets inherit from the base `Widget` class.
+
+```python
+Widget(attrs=None)
+```
+
+<ParamField path="attrs" type="dict">
+  HTML attributes to add to the rendered widget. Common attributes include `class`, `id`, `placeholder`, etc.
+</ParamField>
+
+```python
+widget = forms.TextInput(attrs={
+    'class': 'form-control',
+    'placeholder': 'Enter your name',
+    'maxlength': '100',
+})
+```
+
+### Widget Properties
+
+<ResponseField name="needs_multipart_form" type="bool" default="False">
+  Whether the widget requires multipart form encoding (e.g., file uploads).
+</ResponseField>
+
+<ResponseField name="is_hidden" type="bool">
+  Whether the widget renders as a hidden input.
+</ResponseField>
+
+<ResponseField name="media" type="Media">
+  CSS and JavaScript files required by the widget.
+</ResponseField>
+
+---
+
+## Text Input Widgets
+
+### TextInput
+
+Renders an `<input type="text">` element.
+
+```python
+TextInput(attrs=None)
+```
+
+```python
+name = forms.CharField(
+    widget=forms.TextInput(attrs={'placeholder': 'Full name'})
+)
+```
+
+Rendered HTML:
+```html
+<input type="text" name="name" placeholder="Full name">
+```
+
+### Textarea
+
+Renders a `<textarea>` element.
+
+```python
+Textarea(attrs=None)
+```
+
+Default attributes: `{'cols': '40', 'rows': '10'}`
+
+```python
+comment = forms.CharField(
+    widget=forms.Textarea(attrs={'rows': 5, 'cols': 50})
+)
+```
+
+Rendered HTML:
+```html
+<textarea name="comment" rows="5" cols="50"></textarea>
+```
+
+### PasswordInput
+
+Renders an `<input type="password">` element.
+
+```python
+PasswordInput(
+    attrs=None,
+    render_value=False
+)
+```
+
+<ParamField path="render_value" type="bool" default="False">
+  Whether to render the value in the password field (not recommended for security).
+</ParamField>
+
+```python
+password = forms.CharField(
+    widget=forms.PasswordInput()
+)
+```
+
+### HiddenInput
+
+Renders an `<input type="hidden">` element.
+
+```python
+HiddenInput(attrs=None)
+```
+
+```python
+user_id = forms.IntegerField(
+    widget=forms.HiddenInput()
+)
+```
+
+### EmailInput
+
+Renders an `<input type="email">` element with HTML5 validation.
+
+```python
+EmailInput(attrs=None)
+```
+
+```python
+email = forms.EmailField(
+    widget=forms.EmailInput(attrs={'placeholder': 'you@example.com'})
+)
+```
+
+### URLInput
+
+Renders an `<input type="url">` element.
+
+```python
+URLInput(attrs=None)
+```
+
+### NumberInput
+
+Renders an `<input type="number">` element.
+
+```python
+NumberInput(attrs=None)
+```
+
+Supports `min`, `max`, and `step` attributes:
+
+```python
+age = forms.IntegerField(
+    widget=forms.NumberInput(attrs={'min': '0', 'max': '120'})
+)
+```
+
+### ColorInput
+
+Renders an `<input type="color">` element.
+
+```python
+ColorInput(attrs=None)
+```
+
+```python
+background_color = forms.CharField(
+    widget=forms.ColorInput()
+)
+```
+
+### SearchInput
+
+Renders an `<input type="search">` element.
+
+```python
+SearchInput(attrs=None)
+```
+
+### TelInput
+
+Renders an `<input type="tel">` element.
+
+```python
+TelInput(attrs=None)
+```
+
+---
+
+## Date and Time Widgets
+
+### DateInput
+
+Renders a text input for dates.
+
+```python
+DateInput(
+    attrs=None,
+    format=None
+)
+```
+
+<ParamField path="format" type="str">
+  Date format string (e.g., `'%Y-%m-%d'`).
+</ParamField>
+
+```python
+birthdate = forms.DateField(
+    widget=forms.DateInput(attrs={'type': 'date'})
+)
+```
+
+### TimeInput
+
+Renders a text input for times.
+
+```python
+TimeInput(
+    attrs=None,
+    format=None
+)
+```
+
+```python
+appointment = forms.TimeField(
+    widget=forms.TimeInput(attrs={'type': 'time'})
+)
+```
+
+### DateTimeInput
+
+Renders a text input for datetimes.
+
+```python
+DateTimeInput(
+    attrs=None,
+    format=None
+)
+```
+
+```python
+published_at = forms.DateTimeField(
+    widget=forms.DateTimeInput(attrs={'type': 'datetime-local'})
+)
+```
+
+### SplitDateTimeWidget
+
+Renders separate date and time inputs.
+
+```python
+SplitDateTimeWidget(
+    attrs=None,
+    date_format=None,
+    time_format=None,
+    date_attrs=None,
+    time_attrs=None
+)
+```
+
+<ParamField path="date_attrs" type="dict">
+  Attributes for the date input.
+</ParamField>
+
+<ParamField path="time_attrs" type="dict">
+  Attributes for the time input.
+</ParamField>
+
+```python
+event = forms.SplitDateTimeField(
+    widget=forms.SplitDateTimeWidget(
+        date_attrs={'type': 'date'},
+        time_attrs={'type': 'time'}
+    )
+)
+```
+
+### SelectDateWidget
+
+Renders three select boxes (year, month, day).
+
+```python
+SelectDateWidget(
+    attrs=None,
+    years=None,
+    months=None,
+    empty_label=None
+)
+```
+
+<ParamField path="years" type="list | range">
+  List or range of years to display. Defaults to current year + 10 years.
+</ParamField>
+
+<ParamField path="months" type="dict">
+  Dictionary mapping month numbers to names.
+</ParamField>
+
+<ParamField path="empty_label" type="str | tuple">
+  Label for empty option. Can be a single string or 3-tuple for (year, month, day).
+</ParamField>
+
+```python
+birthdate = forms.DateField(
+    widget=forms.SelectDateWidget(
+        years=range(1920, 2024),
+        empty_label=("Year", "Month", "Day")
+    )
+)
+```
+
+---
+
+## Choice Widgets
+
+### Select
+
+Renders a `<select>` dropdown.
+
+```python
+Select(
+    attrs=None,
+    choices=()
+)
+```
+
+<ParamField path="choices" type="list">
+  List of 2-tuples `(value, label)` for options.
+</ParamField>
+
+```python
+country = forms.ChoiceField(
+    choices=[('us', 'United States'), ('uk', 'United Kingdom')],
+    widget=forms.Select(attrs={'class': 'form-select'})
+)
+```
+
+Rendered HTML:
+```html
+<select name="country" class="form-select">
+  <option value="us">United States</option>
+  <option value="uk">United Kingdom</option>
+</select>
+```
+
+### SelectMultiple
+
+Renders a multi-select `<select multiple>` box.
+
+```python
+SelectMultiple(
+    attrs=None,
+    choices=()
+)
+```
+
+```python
+hobbies = forms.MultipleChoiceField(
+    choices=[('reading', 'Reading'), ('sports', 'Sports'), ('music', 'Music')],
+    widget=forms.SelectMultiple()
+)
+```
+
+### RadioSelect
+
+Renders a list of radio buttons.
+
+```python
+RadioSelect(
+    attrs=None,
+    choices=()
+)
+```
+
+```python
+STATUS_CHOICES = [
+    ('active', 'Active'),
+    ('inactive', 'Inactive'),
+    ('pending', 'Pending'),
+]
+
+status = forms.ChoiceField(
+    choices=STATUS_CHOICES,
+    widget=forms.RadioSelect()
+)
+```
+
+Rendered HTML:
+```html
+<div>
+  <label><input type="radio" name="status" value="active"> Active</label>
+  <label><input type="radio" name="status" value="inactive"> Inactive</label>
+  <label><input type="radio" name="status" value="pending"> Pending</label>
+</div>
+```
+
+### CheckboxSelectMultiple
+
+Renders a list of checkboxes.
+
+```python
+CheckboxSelectMultiple(
+    attrs=None,
+    choices=()
+)
+```
+
+```python
+preferences = forms.MultipleChoiceField(
+    choices=[('email', 'Email'), ('sms', 'SMS'), ('push', 'Push')],
+    widget=forms.CheckboxSelectMultiple()
+)
+```
+
+### CheckboxInput
+
+Renders a single checkbox.
+
+```python
+CheckboxInput(
+    attrs=None,
+    check_test=None
+)
+```
+
+<ParamField path="check_test" type="callable">
+  Function that takes a value and returns `True` if checkbox should be checked.
+</ParamField>
+
+```python
+agree = forms.BooleanField(
+    widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+)
+```
+
+### NullBooleanSelect
+
+Renders a select with True/False/Unknown options.
+
+```python
+NullBooleanSelect(attrs=None)
+```
+
+Options:
+- `"unknown"` → Unknown
+- `"true"` → Yes  
+- `"false"` → No
+
+```python
+is_active = forms.NullBooleanField(
+    widget=forms.NullBooleanSelect()
+)
+```
+
+---
+
+## File Widgets
+
+### FileInput
+
+Renders an `<input type="file">` element.
+
+```python
+FileInput(attrs=None)
+```
+
+```python
+attachment = forms.FileField(
+    widget=forms.FileInput(attrs={'accept': '.pdf,.doc,.docx'})
+)
+```
+
+### ClearableFileInput
+
+File input with option to clear existing file.
+
+```python
+ClearableFileInput(attrs=None)
+```
+
+Provides a checkbox to clear the current file value.
+
+```python
+avatar = forms.ImageField(
+    widget=forms.ClearableFileInput()
+)
+```
+
+Rendered HTML includes:
+- Current file link
+- Clear checkbox
+- New file input
+
+---
+
+## Composite Widgets
+
+### MultiWidget
+
+Base class for widgets composed of multiple widgets.
+
+```python
+MultiWidget(
+    widgets,
+    attrs=None
+)
+```
+
+<ParamField path="widgets" type="list | dict" required>
+  List or dictionary of widget instances.
+</ParamField>
+
+Must implement `decompress(value)` method to split value for sub-widgets.
+
+```python
+class SplitNameWidget(forms.MultiWidget):
+    def __init__(self, attrs=None):
+        widgets = [
+            forms.TextInput(attrs={'placeholder': 'First'}),
+            forms.TextInput(attrs={'placeholder': 'Last'}),
+        ]
+        super().__init__(widgets, attrs)
+    
+    def decompress(self, value):
+        if value:
+            return value.split(' ', 1)
+        return ['', '']
+```
+
+### MultipleHiddenInput
+
+Renders multiple hidden inputs for a list of values.
+
+```python
+MultipleHiddenInput(attrs=None)
+```
+
+Used automatically for `MultipleChoiceField` with hidden widget.
+
+---
+
+## Widget Customization
+
+### Adding CSS Classes
+
+```python
+field = forms.CharField(
+    widget=forms.TextInput(attrs={
+        'class': 'form-control custom-input',
+    })
+)
+```
+
+### Adding Placeholder Text
+
+```python
+email = forms.EmailField(
+    widget=forms.EmailInput(attrs={
+        'placeholder': 'you@example.com',
+    })
+)
+```
+
+### Adding Data Attributes
+
+```python
+price = forms.DecimalField(
+    widget=forms.NumberInput(attrs={
+        'data-currency': 'USD',
+        'data-precision': '2',
+    })
+)
+```
+
+### Disabling Autocomplete
+
+```python
+password = forms.CharField(
+    widget=forms.PasswordInput(attrs={
+        'autocomplete': 'new-password',
+    })
+)
+```
+
+### Adding ARIA Attributes
+
+```python
+name = forms.CharField(
+    widget=forms.TextInput(attrs={
+        'aria-label': 'Your full name',
+        'aria-describedby': 'name-help',
+    })
+)
+```
+
+---
+
+## Widget Media
+
+Widgets can declare CSS and JavaScript dependencies:
+
+```python
+class CustomWidget(forms.Widget):
+    class Media:
+        css = {
+            'all': ('custom.css',)
+        }
+        js = ('custom.js',)
+```
+
+Access in templates:
+
+```html
+<head>
+  {{ form.media.css }}
+  {{ form.media.js }}
+</head>
+```
+
+Or separately:
+
+```html
+{{ form.media.css }}
+{{ form.media.js }}
+```
+
+---
+
+## Template Rendering
+
+Widgets use Django templates for rendering. Default templates:
+
+- `django/forms/widgets/text.html`
+- `django/forms/widgets/select.html`
+- `django/forms/widgets/checkbox.html`
+- etc.
+
+Customize by overriding `template_name`:
+
+```python
+class CustomTextInput(forms.TextInput):
+    template_name = 'myapp/widgets/custom_text.html'
+```
+
+### Widget Context
+
+Widgets provide context variables to templates:
+
+```python
+{
+    'widget': {
+        'name': 'field_name',
+        'value': 'current value',
+        'attrs': {'class': 'form-control'},
+        'is_hidden': False,
+        'required': True,
+        'template_name': 'django/forms/widgets/text.html',
+    }
+}
+```

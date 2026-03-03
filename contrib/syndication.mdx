@@ -1,0 +1,550 @@
+---
+title: Syndication Feeds
+description: RSS and Atom feed generation framework
+---
+
+The syndication framework provides a way to generate RSS and Atom feeds for your content. It's defined in `django.contrib.syndication`.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.sites',  # Required
+    'django.contrib.syndication',
+]
+
+SITE_ID = 1
+```
+
+## Basic Feed
+
+Create a feed class from `django.contrib.syndication.views.Feed`:
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+from django.urls import reverse
+from .models import Article
+
+class LatestArticlesFeed(Feed):
+    title = "My Site - Latest Articles"
+    link = "/articles/"
+    description = "Latest articles from my site."
+    
+    def items(self):
+        return Article.objects.filter(
+            status='published'
+        ).order_by('-published_date')[:10]
+    
+    def item_title(self, item):
+        return item.title
+    
+    def item_description(self, item):
+        return item.excerpt
+    
+    def item_link(self, item):
+        return reverse('article_detail', args=[item.pk])
+```
+
+## URL Configuration
+
+```python urls.py
+from django.urls import path
+from .feeds import LatestArticlesFeed
+
+urlpatterns = [
+    path('feeds/latest/', LatestArticlesFeed(), name='latest_feed'),
+]
+```
+
+Access the feed at `/feeds/latest/`.
+
+## Feed Class Attributes
+
+From `django.contrib.syndication.views.Feed`:
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+from django.utils.feedgenerator import Atom1Feed
+
+class ArticleFeed(Feed):
+    # Feed type (RSS is default)
+    feed_type = Atom1Feed  # For Atom feed
+    
+    # Feed metadata
+    title = "My Blog"
+    link = "/blog/"
+    description = "Latest blog posts"
+    
+    # Optional metadata
+    language = "en"
+    author_name = "John Doe"
+    author_email = "john@example.com"
+    author_link = "https://example.com/about/"
+    
+    # Feed categories
+    categories = ["Technology", "Programming"]
+    
+    # Copyright notice
+    feed_copyright = "Copyright (c) 2024"
+    
+    # TTL (time to live in minutes)
+    ttl = 60
+    
+    def items(self):
+        return Article.objects.published()[:20]
+```
+
+## Dynamic Feed Metadata
+
+Make feed attributes dynamic:
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+from .models import Category, Article
+
+class CategoryFeed(Feed):
+    def get_object(self, request, category_slug):
+        return Category.objects.get(slug=category_slug)
+    
+    def title(self, obj):
+        return f"Articles in {obj.name}"
+    
+    def link(self, obj):
+        return obj.get_absolute_url()
+    
+    def description(self, obj):
+        return f"Latest articles in the {obj.name} category"
+    
+    def items(self, obj):
+        return Article.objects.filter(
+            category=obj,
+            status='published'
+        ).order_by('-published_date')[:10]
+```
+
+```python urls.py
+from django.urls import path
+from .feeds import CategoryFeed
+
+urlpatterns = [
+    path('feeds/category/<slug:category_slug>/', CategoryFeed(), name='category_feed'),
+]
+```
+
+## Item Methods
+
+Customize individual feed items:
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+from django.utils.html import strip_tags
+
+class ArticleFeed(Feed):
+    title = "My Blog"
+    link = "/blog/"
+    description = "Latest articles"
+    
+    def items(self):
+        return Article.objects.published()[:20]
+    
+    # Required methods
+    def item_title(self, item):
+        return item.title
+    
+    def item_description(self, item):
+        # Return HTML content
+        return item.content
+    
+    def item_link(self, item):
+        return item.get_absolute_url()
+    
+    # Optional methods
+    def item_author_name(self, item):
+        return item.author.get_full_name()
+    
+    def item_author_email(self, item):
+        return item.author.email
+    
+    def item_pubdate(self, item):
+        return item.published_date
+    
+    def item_updateddate(self, item):
+        return item.updated_date
+    
+    def item_categories(self, item):
+        return [tag.name for tag in item.tags.all()]
+    
+    def item_copyright(self, item):
+        return f"Copyright (c) {item.author.get_full_name()}"
+```
+
+## Enclosures (Media)
+
+Add media files to feed items:
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+
+class PodcastFeed(Feed):
+    title = "My Podcast"
+    link = "/podcast/"
+    description = "Latest podcast episodes"
+    
+    def items(self):
+        return Episode.objects.published()[:20]
+    
+    def item_title(self, item):
+        return item.title
+    
+    def item_description(self, item):
+        return item.description
+    
+    def item_enclosure_url(self, item):
+        return item.audio_file.url
+    
+    def item_enclosure_length(self, item):
+        return item.audio_file.size
+    
+    def item_enclosure_mime_type(self, item):
+        return "audio/mpeg"
+```
+
+## Custom Templates
+
+Use templates for feed content:
+
+```python feeds.py
+class ArticleFeed(Feed):
+    title = "My Blog"
+    link = "/blog/"
+    
+    # Template for item titles
+    title_template = "feeds/article_title.html"
+    
+    # Template for item descriptions
+    description_template = "feeds/article_description.html"
+    
+    def items(self):
+        return Article.objects.published()[:20]
+```
+
+```django feeds/article_title.html
+{{ obj.title }} - {{ obj.author.username }}
+```
+
+```django feeds/article_description.html
+<h2>{{ obj.title }}</h2>
+<p>{{ obj.excerpt }}</p>
+<div>
+    {{ obj.content|safe }}
+</div>
+<p>Published on {{ obj.published_date|date:"F j, Y" }}</p>
+```
+
+## Feed Types
+
+Different feed formats:
+
+```python feeds.py
+from django.utils.feedgenerator import (
+    Rss201rev2Feed,  # RSS 2.0 (default)
+    Atom1Feed,       # Atom 1.0
+)
+
+# RSS feed (default)
+class RSSFeed(Feed):
+    feed_type = Rss201rev2Feed
+    # ...
+
+# Atom feed
+class AtomFeed(Feed):
+    feed_type = Atom1Feed
+    # ...
+```
+
+## Complex Example
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+from django.utils.feedgenerator import Atom1Feed
+from django.shortcuts import get_object_or_404
+from .models import Article, Author
+
+class AuthorArticleFeed(Feed):
+    """Feed of articles by a specific author."""
+    
+    feed_type = Atom1Feed
+    
+    def get_object(self, request, username):
+        return get_object_or_404(Author, username=username)
+    
+    def title(self, obj):
+        return f"Articles by {obj.get_full_name()}"
+    
+    def link(self, obj):
+        return f"/authors/{obj.username}/"
+    
+    def description(self, obj):
+        return f"Latest articles written by {obj.get_full_name()}"
+    
+    def author_name(self, obj):
+        return obj.get_full_name()
+    
+    def author_email(self, obj):
+        return obj.email
+    
+    def items(self, obj):
+        return Article.objects.filter(
+            author=obj,
+            status='published'
+        ).order_by('-published_date')[:15]
+    
+    def item_title(self, item):
+        return item.title
+    
+    def item_description(self, item):
+        return item.excerpt
+    
+    def item_link(self, item):
+        return item.get_absolute_url()
+    
+    def item_pubdate(self, item):
+        return item.published_date
+    
+    def item_updateddate(self, item):
+        return item.updated_date
+    
+    def item_categories(self, item):
+        return [item.category.name] + [tag.name for tag in item.tags.all()]
+    
+    def item_author_name(self, item):
+        return item.author.get_full_name()
+```
+
+## Feed Autodiscovery
+
+Add feed links to your HTML:
+
+```django base.html
+<head>
+    <title>My Site</title>
+    
+    <!-- RSS Feed -->
+    <link rel="alternate" type="application/rss+xml" 
+          title="Latest Articles" 
+          href="{% url 'latest_feed' %}">
+    
+    <!-- Atom Feed -->
+    <link rel="alternate" type="application/atom+xml" 
+          title="Latest Articles (Atom)" 
+          href="{% url 'atom_feed' %}">
+</head>
+```
+
+## Custom Feed Generator
+
+```python feed_generator.py
+from django.utils.feedgenerator import Rss201rev2Feed
+
+class ExtendedRSSFeed(Rss201rev2Feed):
+    """Custom RSS feed with additional elements."""
+    
+    def root_attributes(self):
+        attrs = super().root_attributes()
+        attrs['xmlns:itunes'] = 'http://www.itunes.com/dtds/podcast-1.0.dtd'
+        return attrs
+    
+    def add_item_elements(self, handler, item):
+        super().add_item_elements(handler, item)
+        
+        # Add custom elements
+        if item.get('itunes_duration'):
+            handler.addQuickElement('itunes:duration', item['itunes_duration'])
+        
+        if item.get('itunes_image'):
+            handler.addQuickElement('itunes:image', '', {'href': item['itunes_image']})
+```
+
+```python feeds.py
+from .feed_generator import ExtendedRSSFeed
+
+class PodcastFeed(Feed):
+    feed_type = ExtendedRSSFeed
+    
+    def item_extra_kwargs(self, item):
+        return {
+            'itunes_duration': item.duration,
+            'itunes_image': item.cover_image.url,
+        }
+```
+
+## Caching Feeds
+
+```python feeds.py
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+from django.contrib.syndication.views import Feed
+
+class CachedFeed(Feed):
+    @method_decorator(cache_page(60 * 15))  # Cache for 15 minutes
+    def __call__(self, request, *args, **kwargs):
+        return super().__call__(request, *args, **kwargs)
+```
+
+## Testing Feeds
+
+```python tests.py
+from django.test import TestCase
+from django.urls import reverse
+from .models import Article
+import feedparser
+
+class FeedTest(TestCase):
+    def setUp(self):
+        self.article = Article.objects.create(
+            title='Test Article',
+            content='Test content',
+            status='published'
+        )
+    
+    def test_feed_renders(self):
+        response = self.client.get(reverse('latest_feed'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/rss+xml; charset=utf-8')
+    
+    def test_feed_contains_article(self):
+        response = self.client.get(reverse('latest_feed'))
+        feed = feedparser.parse(response.content)
+        
+        self.assertEqual(len(feed.entries), 1)
+        self.assertEqual(feed.entries[0].title, 'Test Article')
+```
+
+## Feed with Pagination
+
+```python feeds.py
+from django.contrib.syndication.views import Feed
+from django.core.paginator import Paginator
+
+class PaginatedFeed(Feed):
+    title = "My Blog"
+    link = "/blog/"
+    
+    def get_object(self, request, page=1):
+        articles = Article.objects.published()
+        paginator = Paginator(articles, 20)
+        return paginator.get_page(page)
+    
+    def items(self, obj):
+        return obj.object_list
+    
+    def feed_extra_kwargs(self, obj):
+        extra = {}
+        if obj.has_previous():
+            extra['previous_page'] = obj.previous_page_number()
+        if obj.has_next():
+            extra['next_page'] = obj.next_page_number()
+        return extra
+```
+
+## Multiple Feeds
+
+```python feeds.py
+class LatestArticlesFeed(Feed):
+    title = "Latest Articles"
+    link = "/articles/"
+    description = "All latest articles"
+    
+    def items(self):
+        return Article.objects.published()[:20]
+
+class FeaturedArticlesFeed(Feed):
+    title = "Featured Articles"
+    link = "/articles/featured/"
+    description = "Featured articles only"
+    
+    def items(self):
+        return Article.objects.filter(
+            featured=True,
+            status='published'
+        )[:10]
+
+class CommentsFeed(Feed):
+    title = "Latest Comments"
+    link = "/comments/"
+    description = "Latest comments on articles"
+    
+    def items(self):
+        return Comment.objects.approved()[:20]
+    
+    def item_title(self, item):
+        return f"Comment by {item.author.username}"
+    
+    def item_description(self, item):
+        return item.text
+    
+    def item_link(self, item):
+        return item.article.get_absolute_url() + f"#comment-{item.id}"
+```
+
+```python urls.py
+from .feeds import LatestArticlesFeed, FeaturedArticlesFeed, CommentsFeed
+
+urlpatterns = [
+    path('feeds/latest/', LatestArticlesFeed(), name='latest_feed'),
+    path('feeds/featured/', FeaturedArticlesFeed(), name='featured_feed'),
+    path('feeds/comments/', CommentsFeed(), name='comments_feed'),
+]
+```
+
+## Feed Best Practices
+
+### Limit Items
+
+```python
+def items(self):
+    # Limit to reasonable number
+    return Article.objects.published()[:50]
+```
+
+### Use Select Related
+
+```python
+def items(self):
+    return Article.objects.select_related('author').published()[:20]
+```
+
+### Set Proper Dates
+
+```python
+def item_pubdate(self, item):
+    # Use timezone-aware datetime
+    return item.published_date
+
+def item_updateddate(self, item):
+    return item.updated_date
+```
+
+## Key Classes Reference
+
+### Feed
+
+Location: `django.contrib.syndication.views.Feed`
+
+Base class for creating syndication feeds.
+
+### Rss201rev2Feed
+
+Location: `django.utils.feedgenerator.Rss201rev2Feed`
+
+RSS 2.0 feed generator (default).
+
+### Atom1Feed
+
+Location: `django.utils.feedgenerator.Atom1Feed`
+
+Atom 1.0 feed generator.
+
+<Note>
+Feeds are automatically cached by browsers and feed readers. Set appropriate TTL values and use Last-Modified headers.
+</Note>

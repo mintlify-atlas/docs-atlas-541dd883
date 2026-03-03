@@ -1,0 +1,462 @@
+---
+title: Form Classes
+description: Core form classes and their methods for creating and managing Django forms
+---
+
+## Form
+
+The main class for creating forms with declarative field definitions.
+
+```python
+from django.forms import Form
+
+class ContactForm(Form):
+    name = forms.CharField(max_length=100)
+    email = forms.EmailField()
+    message = forms.CharField(widget=forms.Textarea)
+```
+
+### Constructor
+
+```python
+Form(
+    data=None,
+    files=None,
+    auto_id="id_%s",
+    prefix=None,
+    initial=None,
+    error_class=ErrorList,
+    label_suffix=None,
+    empty_permitted=False,
+    field_order=None,
+    use_required_attribute=None,
+    renderer=None,
+    bound_field_class=None
+)
+```
+
+<ParamField path="data" type="dict">
+  Dictionary of form data (typically `request.POST`). If provided, the form is bound.
+</ParamField>
+
+<ParamField path="files" type="dict">
+  Dictionary of uploaded files (typically `request.FILES`).
+</ParamField>
+
+<ParamField path="auto_id" type="str" default="id_%s">
+  Pattern for generating HTML `id` attributes. Use `False` to disable.
+</ParamField>
+
+<ParamField path="prefix" type="str">
+  Prefix for form field names, useful for multiple forms on one page.
+</ParamField>
+
+<ParamField path="initial" type="dict">
+  Dictionary of initial values for form fields.
+</ParamField>
+
+<ParamField path="error_class" type="class" default="ErrorList">
+  Class to use for rendering error lists.
+</ParamField>
+
+<ParamField path="label_suffix" type="str" default=":">
+  Suffix to append to field labels (defaults to colon).
+</ParamField>
+
+<ParamField path="empty_permitted" type="bool" default="False">
+  Whether the form is allowed to be empty.
+</ParamField>
+
+<ParamField path="field_order" type="list">
+  List of field names specifying the order to display fields.
+</ParamField>
+
+<ParamField path="use_required_attribute" type="bool">
+  Whether to add HTML5 `required` attribute to required fields.
+</ParamField>
+
+<ParamField path="renderer" type="object">
+  Custom form renderer for controlling HTML output.
+</ParamField>
+
+<ParamField path="bound_field_class" type="class">
+  Custom BoundField class for field rendering.
+</ParamField>
+
+### Properties
+
+<ResponseField name="is_bound" type="bool">
+  Returns `True` if the form has data bound to it.
+</ResponseField>
+
+<ResponseField name="errors" type="ErrorDict">
+  Dictionary of validation errors. Triggers validation if not already done.
+</ResponseField>
+
+<ResponseField name="cleaned_data" type="dict">
+  Dictionary of cleaned and validated data. Only available after calling `is_valid()`.
+</ResponseField>
+
+<ResponseField name="fields" type="dict">
+  Dictionary mapping field names to Field instances.
+</ResponseField>
+
+<ResponseField name="changed_data" type="list">
+  List of field names that have changed from their initial values.
+</ResponseField>
+
+<ResponseField name="media" type="Media">
+  Media object containing CSS and JavaScript required by form widgets.
+</ResponseField>
+
+### Validation Methods
+
+#### is_valid()
+
+```python
+form.is_valid() -> bool
+```
+
+Returns `True` if the form has no errors, `False` otherwise.
+
+```python
+if form.is_valid():
+    # Process form.cleaned_data
+    name = form.cleaned_data['name']
+```
+
+#### full_clean()
+
+```python
+form.full_clean() -> None
+```
+
+Runs all validation and populates `cleaned_data` and `errors`. Called automatically by `is_valid()`.
+
+#### clean()
+
+```python
+def clean(self) -> dict
+```
+
+Hook for custom form-wide validation. Override to add cross-field validation.
+
+```python
+class SignupForm(Form):
+    password = forms.CharField(widget=forms.PasswordInput)
+    confirm_password = forms.CharField(widget=forms.PasswordInput)
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('password')
+        confirm = cleaned_data.get('confirm_password')
+        
+        if password != confirm:
+            raise ValidationError('Passwords do not match')
+        
+        return cleaned_data
+```
+
+### Error Handling
+
+#### add_error()
+
+```python
+form.add_error(field, error) -> None
+```
+
+<ParamField path="field" type="str">
+  Name of the field to add error to, or `None` for non-field errors.
+</ParamField>
+
+<ParamField path="error" type="str | ValidationError">
+  Error message or ValidationError instance.
+</ParamField>
+
+```python
+def clean_email(self):
+    email = self.cleaned_data['email']
+    if User.objects.filter(email=email).exists():
+        self.add_error('email', 'Email already registered')
+    return email
+```
+
+#### has_error()
+
+```python
+form.has_error(field, code=None) -> bool
+```
+
+Checks if a field has an error, optionally with a specific error code.
+
+#### non_field_errors()
+
+```python
+form.non_field_errors() -> ErrorList
+```
+
+Returns errors not associated with a particular field.
+
+### Rendering Methods
+
+#### as_div()
+
+```python
+form.as_div() -> str
+```
+
+Renders the form as a series of `<div>` elements (recommended).
+
+```html
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_div }}
+  <button type="submit">Submit</button>
+</form>
+```
+
+#### as_p()
+
+```python
+form.as_p() -> str
+```
+
+Renders the form wrapped in `<p>` tags.
+
+#### as_table()
+
+```python
+form.as_table() -> str
+```
+
+Renders the form as table rows (without `<table>` tags).
+
+#### as_ul()
+
+```python
+form.as_ul() -> str
+```
+
+Renders the form as list items (without `<ul>` tags).
+
+### Field Access
+
+#### visible_fields()
+
+```python
+form.visible_fields() -> list[BoundField]
+```
+
+Returns a list of visible BoundField objects.
+
+#### hidden_fields()
+
+```python
+form.hidden_fields() -> list[BoundField]
+```
+
+Returns a list of hidden BoundField objects.
+
+### Utility Methods
+
+#### has_changed()
+
+```python
+form.has_changed() -> bool
+```
+
+Returns `True` if form data differs from initial values.
+
+#### is_multipart()
+
+```python
+form.is_multipart() -> bool
+```
+
+Returns `True` if the form has file upload fields.
+
+```html
+<form method="post" {% if form.is_multipart %}enctype="multipart/form-data"{% endif %}>
+```
+
+#### add_prefix()
+
+```python
+form.add_prefix(field_name) -> str
+```
+
+Returns the field name with the form's prefix applied.
+
+---
+
+## ModelForm
+
+Creates a form from a Django model, automatically generating fields.
+
+```python
+from django.forms import ModelForm
+from .models import Article
+
+class ArticleForm(ModelForm):
+    class Meta:
+        model = Article
+        fields = ['title', 'content', 'author']
+        widgets = {
+            'content': forms.Textarea(attrs={'rows': 10}),
+        }
+```
+
+### Constructor
+
+```python
+ModelForm(
+    data=None,
+    files=None,
+    auto_id="id_%s",
+    prefix=None,
+    initial=None,
+    error_class=ErrorList,
+    label_suffix=None,
+    empty_permitted=False,
+    instance=None,
+    use_required_attribute=None,
+    renderer=None
+)
+```
+
+<ParamField path="instance" type="Model">
+  Model instance to bind to the form. If provided, form will update this instance on save.
+</ParamField>
+
+All other parameters are the same as `Form`.
+
+### Meta Options
+
+```python
+class Meta:
+    model = MyModel
+    fields = '__all__'  # or list of field names
+    exclude = ['created_at']
+    widgets = {...}
+    labels = {...}
+    help_texts = {...}
+    error_messages = {...}
+    field_classes = {...}
+```
+
+<ParamField path="model" type="class" required>
+  The model class to create the form from.
+</ParamField>
+
+<ParamField path="fields" type="list | str">
+  List of field names to include, or `'__all__'` for all fields. Required if `exclude` is not set.
+</ParamField>
+
+<ParamField path="exclude" type="list">
+  List of field names to exclude from the form.
+</ParamField>
+
+<ParamField path="widgets" type="dict">
+  Dictionary mapping field names to widget instances.
+</ParamField>
+
+<ParamField path="labels" type="dict">
+  Dictionary mapping field names to custom labels.
+</ParamField>
+
+<ParamField path="help_texts" type="dict">
+  Dictionary mapping field names to help text strings.
+</ParamField>
+
+<ParamField path="error_messages" type="dict">
+  Dictionary mapping field names to error message dictionaries.
+</ParamField>
+
+<ParamField path="field_classes" type="dict">
+  Dictionary mapping field names to custom field classes.
+</ParamField>
+
+### Methods
+
+#### save()
+
+```python
+form.save(commit=True) -> Model
+```
+
+<ParamField path="commit" type="bool" default="True">
+  If `True`, saves the model instance to the database. If `False`, returns unsaved instance.
+</ParamField>
+
+```python
+if form.is_valid():
+    instance = form.save(commit=False)
+    instance.created_by = request.user
+    instance.save()
+```
+
+---
+
+## Form Lifecycle
+
+Understanding the form validation lifecycle:
+
+1. **Instantiation**: Form is created with or without data
+2. **Binding**: Form receives data via `data` parameter
+3. **Validation**: Calling `is_valid()` triggers:
+   - `full_clean()` - Main validation orchestrator
+   - `_clean_fields()` - Validates each field:
+     - Field's `to_python()` - Converts to Python type
+     - Field's `validate()` - Runs basic validation
+     - Field's `run_validators()` - Runs custom validators
+     - Form's `clean_<fieldname>()` - Field-specific cleaning
+   - `_clean_form()` - Calls form's `clean()` method
+   - `_post_clean()` - ModelForm hook for model validation
+4. **Access cleaned_data**: Validated data available in `form.cleaned_data`
+5. **Save** (ModelForm only): Persist to database
+
+```python
+# Example validation flow
+form = ContactForm(request.POST)
+
+if form.is_valid():
+    # At this point:
+    # - All fields have been validated
+    # - clean_<fieldname>() methods have been called
+    # - clean() method has been called
+    # - cleaned_data is populated
+    
+    name = form.cleaned_data['name']
+    # Process data...
+else:
+    # form.errors contains validation errors
+    print(form.errors)
+```
+
+## Field Cleaning
+
+Custom field validation using `clean_<fieldname>()` methods:
+
+```python
+class UserForm(Form):
+    username = forms.CharField()
+    email = forms.EmailField()
+    age = forms.IntegerField()
+    
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if User.objects.filter(username=username).exists():
+            raise ValidationError('Username already taken')
+        return username
+    
+    def clean_age(self):
+        age = self.cleaned_data['age']
+        if age < 18:
+            raise ValidationError('Must be 18 or older')
+        return age
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        # Cross-field validation
+        return cleaned_data
+```

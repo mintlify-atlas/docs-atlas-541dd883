@@ -1,0 +1,393 @@
+---
+title: Template Engine
+description: Template engine configuration, Engine class, and loader system
+---
+
+## Engine Class
+
+The `Engine` class is the core of Django's template system, handling template compilation, loading, and rendering.
+
+### Constructor
+
+```python
+from django.template import Engine
+
+engine = Engine(
+    dirs=None,
+    app_dirs=False,
+    context_processors=None,
+    debug=False,
+    loaders=None,
+    string_if_invalid="",
+    file_charset="utf-8",
+    libraries=None,
+    builtins=None,
+    autoescape=True,
+)
+```
+
+### Parameters
+
+<Accordion title="dirs">
+  **Type:** `list`  
+  **Default:** `[]`
+
+  List of directories where the engine should look for template source files in the filesystem loader.
+
+  ```python
+  engine = Engine(dirs=[
+      '/home/user/templates',
+      '/var/www/templates',
+  ])
+  ```
+</Accordion>
+
+<Accordion title="app_dirs">
+  **Type:** `bool`  
+  **Default:** `False`
+
+  Whether the engine should look for templates inside installed applications. When `True`, adds the `app_directories.Loader` to the loader chain.
+
+  ```python
+  engine = Engine(app_dirs=True)
+  ```
+
+  <Warning>Cannot be used together with custom `loaders` parameter.</Warning>
+</Accordion>
+
+<Accordion title="context_processors">
+  **Type:** `list`  
+  **Default:** `[]`
+
+  List of dotted Python paths to callables that add variables to the template context.
+
+  ```python
+  engine = Engine(
+      context_processors=[
+          'django.template.context_processors.debug',
+          'django.template.context_processors.request',
+      ]
+  )
+  ```
+</Accordion>
+
+<Accordion title="debug">
+  **Type:** `bool`  
+  **Default:** `False`
+
+  Boolean that turns on/off template debug mode. Affects error reporting and the `{% debug %}` tag.
+
+  ```python
+  engine = Engine(debug=True)
+  ```
+</Accordion>
+
+<Accordion title="loaders">
+  **Type:** `list`  
+  **Default:** `['django.template.loaders.filesystem.Loader']`
+
+  List of template loader classes or tuples. If `app_dirs=True`, automatically includes the cached loader.
+
+  ```python
+  engine = Engine(loaders=[
+      'django.template.loaders.filesystem.Loader',
+      'django.template.loaders.app_directories.Loader',
+  ])
+  ```
+
+  Default with `app_dirs=True`:
+  ```python
+  [
+      ('django.template.loaders.cached.Loader', [
+          'django.template.loaders.filesystem.Loader',
+          'django.template.loaders.app_directories.Loader',
+      ])
+  ]
+  ```
+</Accordion>
+
+<Accordion title="string_if_invalid">
+  **Type:** `str`  
+  **Default:** `""`
+
+  The output, as a string, that the template system should use for invalid variables.
+
+  ```python
+  engine = Engine(string_if_invalid='INVALID: %s')
+  ```
+</Accordion>
+
+<Accordion title="file_charset">
+  **Type:** `str`  
+  **Default:** `"utf-8"`
+
+  The charset to use when reading template files from the filesystem.
+
+  ```python
+  engine = Engine(file_charset='utf-8')
+  ```
+</Accordion>
+
+<Accordion title="autoescape">
+  **Type:** `bool`  
+  **Default:** `True`
+
+  Whether to enable HTML auto-escaping by default.
+
+  ```python
+  engine = Engine(autoescape=True)
+  ```
+</Accordion>
+
+<Accordion title="libraries">
+  **Type:** `dict`  
+  **Default:** `{}`
+
+  Dictionary of labels to dotted Python paths of template tag modules to register.
+
+  ```python
+  engine = Engine(libraries={
+      'my_tags': 'myapp.templatetags.my_tags',
+  })
+  ```
+</Accordion>
+
+<Accordion title="builtins">
+  **Type:** `list`  
+  **Default:** `[]`
+
+  List of dotted Python paths to template tag modules to add to built-ins.
+
+  Default built-ins:
+  - `django.template.defaulttags`
+  - `django.template.defaultfilters`
+  - `django.template.loader_tags`
+
+  ```python
+  engine = Engine(builtins=['myapp.templatetags.custom'])
+  ```
+</Accordion>
+
+## Engine Methods
+
+### get_template()
+
+Load and return a compiled template by name.
+
+```python
+template = engine.get_template('blog/post_detail.html')
+```
+
+**Parameters:**
+- `template_name` (str): Name or path of the template
+
+**Returns:** Compiled `Template` object
+
+**Raises:** `TemplateDoesNotExist` if template not found
+
+**Partial syntax:**
+```python
+# Load a partial from a template
+partial = engine.get_template('template.html#partial_name')
+```
+
+### from_string()
+
+Compile and return a template from a string.
+
+```python
+template = engine.from_string('Hello {{ name }}!')
+rendered = template.render({'name': 'World'})
+# Output: "Hello World!"
+```
+
+**Parameters:**
+- `template_code` (str): Template source code
+
+**Returns:** Compiled `Template` object
+
+### select_template()
+
+Load the first template that exists from a list of names.
+
+```python
+template = engine.select_template([
+    'blog/post_detail_custom.html',
+    'blog/post_detail.html',
+])
+```
+
+**Parameters:**
+- `template_name_list` (list): List of template names to try
+
+**Returns:** First available compiled `Template` object
+
+**Raises:** `TemplateDoesNotExist` if none of the templates exist
+
+### render_to_string()
+
+Render a template with a context and return the result as a string.
+
+```python
+output = engine.render_to_string('email/welcome.html', {
+    'user': user,
+    'activation_link': link,
+})
+```
+
+**Parameters:**
+- `template_name` (str or list): Template name or list of names
+- `context` (dict): Context dictionary for rendering
+
+**Returns:** Rendered template as a string
+
+### get_default()
+
+Static method that returns the default DjangoTemplates engine.
+
+```python
+from django.template import Engine
+
+default_engine = Engine.get_default()
+```
+
+**Returns:** The first configured `DjangoTemplates` backend engine
+
+**Raises:** `ImproperlyConfigured` if no DjangoTemplates backend is configured
+
+## Template Loaders
+
+Template loaders are responsible for locating templates and returning their contents.
+
+### Built-in Loaders
+
+<Accordion title="filesystem.Loader">
+  Loads templates from directories specified in `DIRS` setting.
+
+  **Path:** `django.template.loaders.filesystem.Loader`
+
+  ```python
+  engine = Engine(
+      dirs=['/home/user/templates'],
+      loaders=['django.template.loaders.filesystem.Loader']
+  )
+  ```
+</Accordion>
+
+<Accordion title="app_directories.Loader">
+  Loads templates from `templates` subdirectories of installed apps.
+
+  **Path:** `django.template.loaders.app_directories.Loader`
+
+  Searches for templates in:
+  - `myapp/templates/`
+
+  ```python
+  engine = Engine(
+      app_dirs=True  # Automatically includes this loader
+  )
+  ```
+</Accordion>
+
+<Accordion title="cached.Loader">
+  Wraps other loaders and caches compiled templates in memory.
+
+  **Path:** `django.template.loaders.cached.Loader`
+
+  ```python
+  engine = Engine(loaders=[
+      ('django.template.loaders.cached.Loader', [
+          'django.template.loaders.filesystem.Loader',
+          'django.template.loaders.app_directories.Loader',
+      ])
+  ])
+  ```
+
+  Automatically used when `app_dirs=True`.
+</Accordion>
+
+<Accordion title="locmem.Loader">
+  Loads templates from a Python dictionary (useful for testing).
+
+  **Path:** `django.template.loaders.locmem.Loader`
+
+  ```python
+  from django.template import engines
+  from django.template.loaders.locmem import Loader
+
+  # Configure in settings
+  TEMPLATES = [{
+      'BACKEND': 'django.template.backends.django.DjangoTemplates',
+      'OPTIONS': {
+          'loaders': [
+              ('django.template.loaders.locmem.Loader', {
+                  'index.html': 'Hello {{ name }}!',
+              }),
+          ],
+      },
+  }]
+  ```
+</Accordion>
+
+## Loader System
+
+The engine uses a chain of loaders to find templates:
+
+1. **find_template()** - Iterates through loaders to find a template
+2. **get_template_loaders()** - Instantiates loader classes
+3. **find_template_loader()** - Loads and instantiates a single loader
+
+```python
+# Internal process when calling get_template()
+template, origin = engine.find_template('app/template.html')
+# Returns compiled template and its origin (file path)
+```
+
+## Usage Examples
+
+### Basic Template Rendering
+
+```python
+from django.template import Engine, Context
+
+engine = Engine()
+template = engine.from_string('Hello {{ name }}!')
+context = Context({'name': 'Django'})
+output = template.render(context)
+print(output)  # "Hello Django!"
+```
+
+### Custom Engine Configuration
+
+```python
+engine = Engine(
+    dirs=['/var/www/templates'],
+    app_dirs=True,
+    context_processors=[
+        'django.template.context_processors.debug',
+        'django.template.context_processors.request',
+        'django.contrib.auth.context_processors.auth',
+    ],
+    debug=True,
+    string_if_invalid='[UNDEFINED: %s]',
+)
+
+template = engine.get_template('base.html')
+```
+
+### Loading Templates with Fallback
+
+```python
+# Try multiple templates in order
+template = engine.select_template([
+    'custom/special.html',
+    'custom/default.html',
+    'fallback.html',
+])
+```
+
+## Related
+
+- [Built-in Tags](/api/templates/built-in-tags)
+- [Built-in Filters](/api/templates/built-in-filters)
+- [Context Processors](/api/templates/context-processors)

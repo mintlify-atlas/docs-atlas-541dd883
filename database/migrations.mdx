@@ -1,0 +1,655 @@
+---
+title: 'Database Migrations'
+description: 'Learn how to create, apply, and manage Django database migrations'
+---
+
+## Introduction
+
+Migrations are Django's way of propagating changes you make to your models (adding a field, deleting a model, etc.) into your database schema. They're implemented in `/django/db/migrations/`.
+
+## How Migrations Work
+
+From Django's source at `/django/db/migrations/migration.py:9`:
+
+```python
+class Migration:
+    """
+    The base class for all migrations.
+
+    Migration files will import this from django.db.migrations.Migration
+    and subclass it as a class called Migration. It will have one or more
+    of the following attributes:
+
+     - operations: A list of Operation instances, probably from
+       django.db.migrations.operations
+     - dependencies: A list of tuples of (app_path, migration_name)
+     - run_before: A list of tuples of (app_path, migration_name)
+     - replaces: A list of migration_names
+    """
+    
+    # Operations to apply during this migration, in order.
+    operations = []
+    
+    # Other migrations that should be run before this migration.
+    dependencies = []
+    
+    # Other migrations that should be run after this one.
+    run_before = []
+    
+    # Whether to wrap the whole migration in a transaction.
+    atomic = True
+```
+
+## Creating Migrations
+
+### Automatic Migration Creation
+
+Django automatically generates migrations based on model changes:
+
+```bash
+# Create migrations for all apps
+python manage.py makemigrations
+
+# Create migrations for specific app
+python manage.py makemigrations myapp
+
+# Create empty migration (for custom operations)
+python manage.py makemigrations --empty myapp
+
+# Show what migrations would be created without creating them
+python manage.py makemigrations --dry-run
+
+# Give the migration a custom name
+python manage.py makemigrations myapp --name add_user_indexes
+```
+
+### Example: Model Change to Migration
+
+When you add a field to a model:
+
+```python
+# models.py
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    # New field added
+    published_date = models.DateTimeField(null=True, blank=True)
+```
+
+Run `makemigrations` to generate:
+
+```python
+# migrations/0002_article_published_date.py
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ('myapp', '0001_initial'),
+    ]
+    
+    operations = [
+        migrations.AddField(
+            model_name='article',
+            name='published_date',
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+    ]
+```
+
+## Migration Operations
+
+From Django's source at `/django/db/migrations/operations/`, common operations include:
+
+### CreateModel
+
+From `/django/db/migrations/operations/models.py:44`:
+
+```python
+class CreateModel(ModelOperation):
+    """Create a model's table."""
+    
+    def __init__(self, name, fields, options=None, bases=None, managers=None):
+        self.fields = fields
+        self.options = options or {}
+        self.bases = bases or (models.Model,)
+        self.managers = managers or []
+```
+
+Example migration:
+
+```python
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+    operations = [
+        migrations.CreateModel(
+            name='Author',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True)),
+                ('name', models.CharField(max_length=100)),
+                ('email', models.EmailField(unique=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+            ],
+            options={
+                'db_table': 'authors',
+                'ordering': ['name'],
+            },
+        ),
+    ]
+```
+
+### AddField
+
+```python
+migrations.AddField(
+    model_name='article',
+    name='view_count',
+    field=models.IntegerField(default=0),
+)
+```
+
+### RemoveField
+
+```python
+migrations.RemoveField(
+    model_name='article',
+    name='obsolete_field',
+)
+```
+
+### AlterField
+
+```python
+migrations.AlterField(
+    model_name='article',
+    name='title',
+    field=models.CharField(max_length=300),  # Changed from 200
+)
+```
+
+### RenameField
+
+```python
+migrations.RenameField(
+    model_name='article',
+    old_name='pub_date',
+    new_name='published_date',
+)
+```
+
+### DeleteModel
+
+```python
+migrations.DeleteModel(
+    name='OldModel',
+)
+```
+
+### RenameModel
+
+```python
+migrations.RenameModel(
+    old_name='Article',
+    new_name='BlogPost',
+)
+```
+
+### AddIndex
+
+```python
+migrations.AddIndex(
+    model_name='article',
+    index=models.Index(fields=['title', 'created_at'], name='article_title_created_idx'),
+)
+```
+
+### RemoveIndex
+
+```python
+migrations.RemoveIndex(
+    model_name='article',
+    name='article_title_created_idx',
+)
+```
+
+### AddConstraint
+
+```python
+migrations.AddConstraint(
+    model_name='article',
+    constraint=models.CheckConstraint(
+        check=models.Q(view_count__gte=0),
+        name='view_count_positive'
+    ),
+)
+```
+
+## Applying Migrations
+
+### Running Migrations
+
+```bash
+# Apply all migrations
+python manage.py migrate
+
+# Apply migrations for specific app
+python manage.py migrate myapp
+
+# Migrate to specific migration
+python manage.py migrate myapp 0003
+
+# Show which migrations would be applied
+python manage.py migrate --plan
+
+# Apply migrations and show SQL
+python manage.py migrate --verbosity 3
+
+# Fake migrations (mark as applied without running)
+python manage.py migrate myapp 0003 --fake
+
+# Fake initial migration (for existing databases)
+python manage.py migrate myapp --fake-initial
+```
+
+### Checking Migration Status
+
+```bash
+# Show all migrations and their status
+python manage.py showmigrations
+
+# Show migrations for specific app
+python manage.py showmigrations myapp
+
+# Show in list format
+python manage.py showmigrations --list
+
+# Show in plan format
+python manage.py showmigrations --plan
+```
+
+## Custom Data Migrations
+
+Create migrations that manipulate data:
+
+```bash
+python manage.py makemigrations --empty myapp --name populate_slugs
+```
+
+Edit the generated migration:
+
+```python
+from django.db import migrations
+from django.utils.text import slugify
+
+def populate_slugs(apps, schema_editor):
+    # Get historical model
+    Article = apps.get_model('myapp', 'Article')
+    
+    for article in Article.objects.all():
+        if not article.slug:
+            article.slug = slugify(article.title)
+            article.save()
+
+def reverse_populate_slugs(apps, schema_editor):
+    # Reverse operation (optional)
+    Article = apps.get_model('myapp', 'Article')
+    Article.objects.all().update(slug='')
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ('myapp', '0004_article_slug'),
+    ]
+    
+    operations = [
+        migrations.RunPython(
+            populate_slugs,
+            reverse_populate_slugs,
+        ),
+    ]
+```
+
+<Warning>
+Always use `apps.get_model()` in data migrations, not direct model imports. This ensures you're working with the historical model state at the time of the migration.
+</Warning>
+
+### RunPython Examples
+
+```python
+# Simple data transformation
+def convert_prices(apps, schema_editor):
+    Product = apps.get_model('shop', 'Product')
+    for product in Product.objects.all():
+        product.price = product.price * 100  # Convert to cents
+        product.save()
+
+# Using bulk operations (more efficient)
+def set_default_category(apps, schema_editor):
+    Article = apps.get_model('blog', 'Article')
+    Category = apps.get_model('blog', 'Category')
+    
+    default_category = Category.objects.get_or_create(name='Uncategorized')[0]
+    Article.objects.filter(category__isnull=True).update(
+        category=default_category
+    )
+
+# With database operations
+def create_default_groups(apps, schema_editor):
+    Group = apps.get_model('auth', 'Group')
+    Permission = apps.get_model('auth', 'Permission')
+    
+    # Create groups
+    editors = Group.objects.create(name='Editors')
+    viewers = Group.objects.create(name='Viewers')
+    
+    # Assign permissions
+    edit_permission = Permission.objects.get(codename='change_article')
+    editors.permissions.add(edit_permission)
+```
+
+### RunSQL for Custom SQL
+
+```python
+from django.db import migrations
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ('myapp', '0005_previous_migration'),
+    ]
+    
+    operations = [
+        # Simple SQL
+        migrations.RunSQL(
+            sql="CREATE INDEX idx_article_title_gin ON articles USING gin(to_tsvector('english', title));",
+            reverse_sql="DROP INDEX idx_article_title_gin;",
+        ),
+        
+        # Multiple statements
+        migrations.RunSQL(
+            sql=[
+                "UPDATE articles SET view_count = 0 WHERE view_count IS NULL;",
+                "ALTER TABLE articles ALTER COLUMN view_count SET NOT NULL;",
+            ],
+            reverse_sql=[
+                "ALTER TABLE articles ALTER COLUMN view_count DROP NOT NULL;",
+            ],
+        ),
+        
+        # With parameters (PostgreSQL)
+        migrations.RunSQL(
+            sql="INSERT INTO categories (name, slug) VALUES (%s, %s);",
+            params=[('Technology', 'tech')],
+        ),
+    ]
+```
+
+<Note>
+`RunSQL` operations are database-specific. Use `migrations.RunSQL.noop` for the reverse operation if the migration is irreversible.
+</Note>
+
+## Migration Dependencies
+
+Migrations can depend on other migrations:
+
+```python
+class Migration(migrations.Migration):
+    # This migration requires these migrations to be applied first
+    dependencies = [
+        ('myapp', '0004_previous_migration'),
+        ('apping', '0002_other_app_migration'),  # Cross-app dependency
+    ]
+    
+    # This migration should run before these migrations
+    run_before = [
+        ('otherapp', '0003_needs_our_changes'),
+    ]
+```
+
+## Squashing Migrations
+
+Combine multiple migrations into one:
+
+```bash
+# Squash migrations 0001 through 0005
+python manage.py squashmigrations myapp 0001 0005
+
+# Squash all migrations
+python manage.py squashmigrations myapp
+```
+
+This creates a new migration that replaces the old ones:
+
+```python
+class Migration(migrations.Migration):
+    replaces = [
+        ('myapp', '0001_initial'),
+        ('myapp', '0002_add_fields'),
+        ('myapp', '0003_alter_fields'),
+        ('myapp', '0004_add_indexes'),
+        ('myapp', '0005_data_migration'),
+    ]
+    
+    operations = [
+        # Combined operations
+    ]
+```
+
+<Tip>
+Squash migrations periodically to keep your migration history manageable. This is especially useful for mature projects with hundreds of migrations.
+</Tip>
+
+## Reversing Migrations
+
+```bash
+# Roll back to a specific migration
+python manage.py migrate myapp 0003
+
+# Roll back all migrations for an app
+python manage.py migrate myapp zero
+
+# Show SQL for reverting
+python manage.py sqlmigrate myapp 0004 --backwards
+```
+
+## Migration Files
+
+Migration files are Python files in the `migrations/` directory:
+
+```
+myapp/
+├── migrations/
+│   ├── __init__.py
+│   ├── 0001_initial.py
+│   ├── 0002_add_published_date.py
+│   ├── 0003_add_author.py
+│   └── 0004_populate_authors.py
+├── models.py
+└── views.py
+```
+
+### Initial Migration
+
+The first migration for an app:
+
+```python
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+    initial = True
+    
+    dependencies = []
+    
+    operations = [
+        migrations.CreateModel(
+            name='Article',
+            fields=[
+                ('id', models.BigAutoField(primary_key=True)),
+                ('title', models.CharField(max_length=200)),
+                ('content', models.TextField()),
+            ],
+        ),
+    ]
+```
+
+## Viewing Migration SQL
+
+```bash
+# Show SQL for a migration
+python manage.py sqlmigrate myapp 0002
+
+# Show SQL for all pending migrations
+python manage.py sqlmigrate myapp
+```
+
+## Testing Migrations
+
+```python
+from django.test import TestCase
+from django.core.management import call_command
+
+class MigrationTest(TestCase):
+    def test_migration_0005(self):
+        # Start at previous migration
+        call_command('migrate', 'myapp', '0004')
+        
+        # Apply the migration we want to test
+        call_command('migrate', 'myapp', '0005')
+        
+        # Verify the migration worked
+        from myapp.models import Article
+        articles = Article.objects.all()
+        self.assertTrue(all(article.slug for article in articles))
+```
+
+## Common Migration Patterns
+
+### Adding a Non-Nullable Field
+
+```python
+# Step 1: Add nullable field
+class Migration(migrations.Migration):
+    operations = [
+        migrations.AddField(
+            model_name='article',
+            name='category',
+            field=models.ForeignKey(
+                'Category',
+                on_delete=models.CASCADE,
+                null=True  # Temporary
+            ),
+        ),
+    ]
+
+# Step 2: Populate the field
+class Migration(migrations.Migration):
+    dependencies = [('myapp', '0006_add_nullable_category')]
+    
+    operations = [
+        migrations.RunPython(populate_categories),
+    ]
+
+# Step 3: Make field non-nullable
+class Migration(migrations.Migration):
+    dependencies = [('myapp', '0007_populate_categories')]
+    
+    operations = [
+        migrations.AlterField(
+            model_name='article',
+            name='category',
+            field=models.ForeignKey(
+                'Category',
+                on_delete=models.CASCADE,
+                null=False  # Now required
+            ),
+        ),
+    ]
+```
+
+### Renaming a Field
+
+```python
+# Django can auto-detect this, but you can be explicit:
+migrations.RenameField(
+    model_name='article',
+    old_name='pub_date',
+    new_name='published_date',
+)
+```
+
+### Changing Field Type
+
+```python
+# Be careful - this might require data conversion
+migrations.AlterField(
+    model_name='product',
+    name='price',
+    field=models.DecimalField(max_digits=10, decimal_places=2),
+    # Was: models.FloatField()
+)
+```
+
+## Migration Best Practices
+
+1. **Always review auto-generated migrations** before applying them
+2. **Test migrations on a copy of production data** before deploying
+3. **Keep migrations small and focused** - one logical change per migration
+4. **Write reversible migrations** when possible
+5. **Use data migrations for complex transformations** instead of raw SQL
+6. **Backup your database** before running migrations in production
+7. **Don't modify applied migrations** - create new migrations instead
+8. **Use atomic migrations** (default) to rollback on errors
+
+<Warning>
+Never edit a migration that has been applied to production databases. Always create a new migration to make changes.
+</Warning>
+
+## Deployment Considerations
+
+### Zero-Downtime Migrations
+
+For large-scale deployments:
+
+```python
+# Phase 1: Add new field (nullable)
+migrations.AddField(
+    model_name='user',
+    name='new_email',
+    field=models.EmailField(null=True),
+)
+
+# Deploy code that writes to both old and new fields
+# Wait for all instances to be updated
+
+# Phase 2: Copy data
+migrations.RunPython(copy_email_to_new_field)
+
+# Phase 3: Make new field non-nullable
+migrations.AlterField(
+    model_name='user',
+    name='new_email',
+    field=models.EmailField(null=False),
+)
+
+# Deploy code that only uses new field
+
+# Phase 4: Remove old field
+migrations.RemoveField(
+    model_name='user',
+    name='old_email',
+)
+```
+
+### Handling Large Tables
+
+```python
+# For large tables, use non-atomic migration
+class Migration(migrations.Migration):
+    atomic = False  # Don't wrap in transaction
+    
+    operations = [
+        # Your operations here
+    ]
+```
+
+<Tip>
+For very large tables, consider using database-specific features like PostgreSQL's `CONCURRENTLY` option for index creation, or MySQL's online DDL.
+</Tip>

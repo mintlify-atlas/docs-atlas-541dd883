@@ -1,0 +1,561 @@
+---
+title: 'Aggregation'
+description: 'Learn how to use Django aggregation functions like Count, Sum, Avg, Min, Max with aggregate() and annotate()'
+---
+
+## Introduction
+
+Django provides powerful aggregation tools to calculate summary values from your data. The aggregation framework is implemented in `/django/db/models/aggregates.py`.
+
+## Aggregation Functions
+
+Django provides several built-in aggregation functions:
+
+```python
+from django.db.models import (
+    Avg,      # Average
+    Count,    # Count
+    Max,      # Maximum
+    Min,      # Minimum
+    Sum,      # Sum
+    StdDev,   # Standard deviation
+    Variance, # Variance
+)
+```
+
+## Using aggregate()
+
+The `aggregate()` method returns a dictionary of aggregate values calculated over an entire QuerySet.
+
+From Django's source at `query.py:592`:
+
+```python
+def aggregate(self, *args, **kwargs):
+    """
+    Return a dictionary containing the calculations (aggregation)
+    over the current queryset.
+    """
+    return self.query.chain().get_aggregation(self.db, kwargs)
+```
+
+### Basic Examples
+
+```python
+from django.db.models import Count, Avg, Sum, Min, Max
+from myapp.models import Book, Order
+
+# Count all books
+result = Book.objects.aggregate(total=Count('id'))
+# {'total': 150}
+
+# Average price
+result = Book.objects.aggregate(avg_price=Avg('price'))
+# {'avg_price': 24.99}
+
+# Multiple aggregations
+result = Book.objects.aggregate(
+    total_books=Count('id'),
+    avg_price=Avg('price'),
+    max_price=Max('price'),
+    min_price=Min('price'),
+    total_value=Sum('price')
+)
+# {
+#     'total_books': 150,
+#     'avg_price': 24.99,
+#     'max_price': 49.99,
+#     'min_price': 9.99,
+#     'total_value': 3748.50
+# }
+```
+
+### Default Aliases
+
+If you don't provide an alias, Django generates one:
+
+```python
+result = Book.objects.aggregate(Avg('price'))
+# {'price__avg': 24.99}
+
+result = Book.objects.aggregate(Count('id'))
+# {'id__count': 150}
+```
+
+## Using annotate()
+
+The `annotate()` method adds aggregate values to each object in a QuerySet. Unlike `aggregate()`, it returns a QuerySet with the computed values attached.
+
+```python
+from django.db.models import Count, Avg, Sum
+
+# Count books per author
+authors = Author.objects.annotate(book_count=Count('books'))
+
+for author in authors:
+    print(f"{author.name}: {author.book_count} books")
+
+# Average rating per book
+books = Book.objects.annotate(avg_rating=Avg('reviews__rating'))
+
+for book in books:
+    print(f"{book.title}: {book.avg_rating}")
+```
+
+### Filtering with Annotated Values
+
+```python
+# Authors with more than 5 books
+authors = Author.objects.annotate(
+    book_count=Count('books')
+).filter(book_count__gt=5)
+
+# Books with average rating above 4.0
+books = Book.objects.annotate(
+    avg_rating=Avg('reviews__rating')
+).filter(avg_rating__gte=4.0)
+```
+
+## Count Aggregation
+
+From Django's source at `aggregates.py:244`:
+
+```python
+class Count(Aggregate):
+    function = "COUNT"
+    name = "Count"
+    output_field = IntegerField()
+    allow_distinct = True
+    empty_result_set_value = 0
+```
+
+### Count Examples
+
+```python
+from django.db.models import Count
+
+# Count all books
+total = Book.objects.count()
+# or
+result = Book.objects.aggregate(total=Count('id'))
+
+# Count distinct values
+result = Order.objects.aggregate(
+    unique_customers=Count('customer_id', distinct=True)
+)
+
+# Count related objects
+authors = Author.objects.annotate(book_count=Count('books'))
+
+# Count with filter
+from django.db.models import Q
+
+authors = Author.objects.annotate(
+    published_count=Count('books', filter=Q(books__is_published=True)),
+    draft_count=Count('books', filter=Q(books__is_published=False))
+)
+```
+
+<Note>
+The `empty_result_set_value = 0` means that `Count()` returns 0 for empty QuerySets, unlike other aggregations which return `None`.
+</Note>
+
+## Sum Aggregation
+
+From Django's source at `aggregates.py:401`:
+
+```python
+class Sum(FixDurationInputMixin, Aggregate):
+    function = "SUM"
+    name = "Sum"
+    allow_distinct = True
+```
+
+### Sum Examples
+
+```python
+from django.db.models import Sum
+
+# Total revenue
+result = Order.objects.aggregate(total_revenue=Sum('amount'))
+# {'total_revenue': 125000.50}
+
+# Sum with filter
+total_paid = Order.objects.filter(
+    status='paid'
+).aggregate(total=Sum('amount'))
+
+# Sum per group
+categories = Category.objects.annotate(
+    total_sales=Sum('products__sales')
+).order_by('-total_sales')
+
+# Multiple sums
+result = Order.objects.aggregate(
+    total_amount=Sum('amount'),
+    total_tax=Sum('tax'),
+    total_shipping=Sum('shipping_cost')
+)
+```
+
+## Avg (Average) Aggregation
+
+From Django's source at `aggregates.py:237`:
+
+```python
+class Avg(FixDurationInputMixin, NumericOutputFieldMixin, Aggregate):
+    function = "AVG"
+    name = "Avg"
+    allow_distinct = True
+```
+
+### Average Examples
+
+```python
+from django.db.models import Avg
+
+# Average book price
+result = Book.objects.aggregate(avg_price=Avg('price'))
+# {'avg_price': 24.99}
+
+# Average rating per book
+books = Book.objects.annotate(
+    avg_rating=Avg('reviews__rating')
+).order_by('-avg_rating')
+
+# Average with filter
+result = Book.objects.filter(
+    is_published=True
+).aggregate(avg_price=Avg('price'))
+
+# Average with distinct
+result = Order.objects.aggregate(
+    avg_unique_price=Avg('items__price', distinct=True)
+)
+```
+
+## Max and Min Aggregation
+
+From Django's source at `aggregates.py:277`:
+
+```python
+class Max(Aggregate):
+    function = "MAX"
+    name = "Max"
+
+class Min(Aggregate):
+    function = "MIN"
+    name = "Min"
+```
+
+### Max/Min Examples
+
+```python
+from django.db.models import Max, Min
+
+# Most expensive and cheapest book
+result = Book.objects.aggregate(
+    max_price=Max('price'),
+    min_price=Min('price')
+)
+# {'max_price': 49.99, 'min_price': 9.99}
+
+# Latest and earliest order date
+result = Order.objects.aggregate(
+    latest=Max('created_at'),
+    earliest=Min('created_at')
+)
+
+# Per category
+categories = Category.objects.annotate(
+    highest_price=Max('products__price'),
+    lowest_price=Min('products__price')
+)
+```
+
+## Aggregating Over Related Objects
+
+```python
+# Count books per author (reverse ForeignKey)
+authors = Author.objects.annotate(
+    book_count=Count('books')
+)
+
+# Sum of order amounts per customer
+customers = Customer.objects.annotate(
+    total_spent=Sum('orders__amount')
+)
+
+# Average rating per book from reviews
+books = Book.objects.annotate(
+    avg_rating=Avg('reviews__rating'),
+    review_count=Count('reviews')
+)
+
+# Multiple levels of relations
+authors = Author.objects.annotate(
+    total_reviews=Count('books__reviews'),
+    avg_rating=Avg('books__reviews__rating')
+)
+```
+
+## Grouping with values()
+
+Combine `values()` with `annotate()` to group by specific fields:
+
+```python
+from django.db.models import Count, Avg, Sum
+
+# Count books by category
+result = Book.objects.values('category').annotate(
+    count=Count('id')
+).order_by('-count')
+# [{'category': 'Fiction', 'count': 45}, {'category': 'Science', 'count': 32}, ...]
+
+# Sales by month
+from django.db.models.functions import TruncMonth
+
+monthly_sales = Order.objects.annotate(
+    month=TruncMonth('created_at')
+).values('month').annotate(
+    total=Sum('amount'),
+    count=Count('id')
+).order_by('month')
+
+# Multiple grouping fields
+stats = Order.objects.values('customer', 'status').annotate(
+    total=Sum('amount'),
+    count=Count('id')
+)
+```
+
+## Conditional Aggregation
+
+Use the `filter` parameter to conditionally aggregate:
+
+```python
+from django.db.models import Count, Sum, Q
+
+# Count published and draft books separately
+authors = Author.objects.annotate(
+    published_books=Count('books', filter=Q(books__is_published=True)),
+    draft_books=Count('books', filter=Q(books__is_published=False))
+)
+
+# Revenue by order status
+result = Order.objects.aggregate(
+    paid_revenue=Sum('amount', filter=Q(status='paid')),
+    pending_revenue=Sum('amount', filter=Q(status='pending')),
+    total_revenue=Sum('amount')
+)
+```
+
+From Django's source at `aggregates.py:98`, the filter parameter uses `AggregateFilter`:
+
+```python
+self.filter = None if filter is None else AggregateFilter(filter)
+```
+
+## Aggregation with F Expressions
+
+Combine aggregation with F expressions for complex calculations:
+
+```python
+from django.db.models import F, Sum, ExpressionWrapper, DecimalField
+
+# Calculate total value (quantity * price)
+total = OrderItem.objects.aggregate(
+    total_value=Sum(F('quantity') * F('price'))
+)
+
+# Calculate profit margin
+products = Product.objects.annotate(
+    profit=ExpressionWrapper(
+        F('price') - F('cost'),
+        output_field=DecimalField()
+    )
+).aggregate(
+    total_profit=Sum('profit'),
+    avg_profit=Avg('profit')
+)
+
+# Revenue per order
+orders = Order.objects.annotate(
+    revenue=Sum(F('items__quantity') * F('items__price'))
+).order_by('-revenue')
+```
+
+## Standard Deviation and Variance
+
+From Django's source at `aggregates.py:289`:
+
+```python
+class StdDev(NumericOutputFieldMixin, Aggregate):
+    name = "StdDev"
+    
+    def __init__(self, expression, sample=False, **extra):
+        self.function = "STDDEV_SAMP" if sample else "STDDEV_POP"
+        super().__init__(expression, **extra)
+
+class Variance(NumericOutputFieldMixin, Aggregate):
+    name = "Variance"
+    
+    def __init__(self, expression, sample=False, **extra):
+        self.function = "VAR_SAMP" if sample else "VAR_POP"
+        super().__init__(expression, **extra)
+```
+
+### StdDev/Variance Examples
+
+```python
+from django.db.models import StdDev, Variance
+
+# Calculate standard deviation and variance
+result = Order.objects.aggregate(
+    amount_stddev=StdDev('amount'),
+    amount_variance=Variance('amount')
+)
+
+# Sample vs population
+result = Order.objects.aggregate(
+    sample_stddev=StdDev('amount', sample=True),
+    population_stddev=StdDev('amount', sample=False)
+)
+```
+
+## Aggregation with Ordering
+
+Some aggregation functions support ordering (PostgreSQL, Oracle):
+
+```python
+from django.db.models import StringAgg
+
+# Concatenate author names
+book = Book.objects.annotate(
+    author_list=StringAgg(
+        'authors__name',
+        delimiter=', ',
+        ordering='authors__name'
+    )
+)
+```
+
+From Django's source at `aggregates.py:320`:
+
+```python
+class StringAgg(Aggregate):
+    function = "STRING_AGG"
+    name = "StringAgg"
+    allow_distinct = True
+    allow_order_by = True
+    output_field = TextField()
+```
+
+## Aggregation Best Practices
+
+### 1. Use Appropriate Aggregation Level
+
+```python
+# Good: Single query for summary
+total = Order.objects.aggregate(Sum('amount'))['amount__sum']
+
+# Bad: Fetch all records and sum in Python
+orders = Order.objects.all()
+total = sum(order.amount for order in orders)  # Inefficient!
+```
+
+### 2. Combine Multiple Aggregations
+
+```python
+# Good: Single query
+stats = Order.objects.aggregate(
+    total=Sum('amount'),
+    avg=Avg('amount'),
+    count=Count('id'),
+    max=Max('amount'),
+    min=Min('amount')
+)
+
+# Bad: Multiple queries
+total = Order.objects.aggregate(Sum('amount'))
+avg = Order.objects.aggregate(Avg('amount'))
+count = Order.objects.count()
+```
+
+### 3. Filter Before Aggregating
+
+```python
+# Good: Filter first, then aggregate
+result = Order.objects.filter(
+    created_at__year=2024,
+    status='paid'
+).aggregate(total=Sum('amount'))
+
+# Less efficient: Aggregate everything, filter in Python
+```
+
+### 4. Use annotate() for Per-Object Aggregation
+
+```python
+# Good: Single query with annotation
+authors = Author.objects.annotate(
+    book_count=Count('books')
+).filter(book_count__gt=5)
+
+# Bad: Query per author
+authors = []
+for author in Author.objects.all():
+    if author.books.count() > 5:
+        authors.append(author)
+```
+
+<Tip>
+Always use database aggregation functions instead of fetching all records and calculating in Python. It's much more efficient.
+</Tip>
+
+## Common Aggregation Patterns
+
+### Top N by Aggregation
+
+```python
+# Top 10 authors by book count
+top_authors = Author.objects.annotate(
+    book_count=Count('books')
+).order_by('-book_count')[:10]
+```
+
+### Percentage Calculation
+
+```python
+from django.db.models import F, FloatField, ExpressionWrapper
+
+# Calculate percentage of total
+total = Order.objects.aggregate(total=Sum('amount'))['total']
+
+orders = Order.objects.annotate(
+    percentage=ExpressionWrapper(
+        F('amount') * 100.0 / total,
+        output_field=FloatField()
+    )
+)
+```
+
+### Running Totals
+
+```python
+from django.db.models import Window, Sum
+from django.db.models.functions import ExtractMonth
+
+# Monthly running total
+orders = Order.objects.annotate(
+    month=ExtractMonth('created_at')
+).annotate(
+    running_total=Window(
+        expression=Sum('amount'),
+        order_by=F('created_at').asc()
+    )
+)
+```
+
+<Warning>
+Window functions are only supported on PostgreSQL, SQLite 3.25+, Oracle, and MariaDB 10.2+. Check your database compatibility before using them.
+</Warning>

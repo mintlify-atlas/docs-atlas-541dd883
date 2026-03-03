@@ -1,0 +1,706 @@
+---
+title: 'Request & Response'
+description: 'Django HttpRequest and HttpResponse objects API reference'
+---
+
+## HttpRequest
+
+Represents an HTTP request from the client.
+
+```python
+def my_view(request):
+    # Access request data
+    method = request.method
+    path = request.path
+    user = request.user
+    
+    # Get query parameters
+    page = request.GET.get('page', 1)
+    
+    # Get POST data
+    if request.method == 'POST':
+        username = request.POST['username']
+    
+    return HttpResponse('OK')
+```
+
+### Attributes
+
+<ResponseField name="method" type="str">
+  The HTTP method used in the request: `'GET'`, `'POST'`, `'PUT'`, `'PATCH'`, `'DELETE'`, `'HEAD'`, `'OPTIONS'`, or `'TRACE'`
+</ResponseField>
+
+<ResponseField name="path" type="str">
+  The path portion of the URL, not including the query string. Example: `'/articles/2024/'`
+</ResponseField>
+
+<ResponseField name="path_info" type="str">
+  Like `path`, but may be modified by middleware
+</ResponseField>
+
+<ResponseField name="GET" type="QueryDict">
+  A dictionary-like object containing all URL query parameters. Keys and values are strings.
+</ResponseField>
+
+<ResponseField name="POST" type="QueryDict">
+  A dictionary-like object containing all POST parameters. Only populated for POST requests with form data.
+</ResponseField>
+
+<ResponseField name="FILES" type="MultiValueDict">
+  A dictionary-like object containing all uploaded files. Keys are field names, values are `UploadedFile` objects.
+</ResponseField>
+
+<ResponseField name="COOKIES" type="dict">
+  A dictionary containing all cookies
+</ResponseField>
+
+<ResponseField name="META" type="dict">
+  A dictionary containing all HTTP headers and WSGI environment variables. Header names are prefixed with `HTTP_` and converted to uppercase with underscores.
+  
+  Common keys:
+  - `HTTP_USER_AGENT` - Browser user agent string
+  - `HTTP_REFERER` - Referring page
+  - `HTTP_HOST` - Host header
+  - `REMOTE_ADDR` - Client IP address
+  - `REQUEST_METHOD` - Request method
+  - `CONTENT_TYPE` - Content type header
+  - `CONTENT_LENGTH` - Content length header
+</ResponseField>
+
+<ResponseField name="headers" type="HttpHeaders">
+  A case-insensitive dictionary-like object providing access to all HTTP headers. Use hyphens or underscores in header names.
+  
+  ```python
+  user_agent = request.headers['User-Agent']
+  # or
+  user_agent = request.headers['user_agent']
+  ```
+</ResponseField>
+
+<ResponseField name="body" type="bytes">
+  The raw HTTP request body as a bytestring. Useful for processing non-form data (e.g., JSON, XML).
+</ResponseField>
+
+<ResponseField name="content_type" type="str">
+  The MIME type of the request body, parsed from the Content-Type header
+</ResponseField>
+
+<ResponseField name="content_params" type="dict">
+  Additional parameters from the Content-Type header (e.g., charset)
+</ResponseField>
+
+<ResponseField name="encoding" type="str">
+  The encoding used to decode form data. Defaults to `DEFAULT_CHARSET` setting (usually UTF-8).
+</ResponseField>
+
+<ResponseField name="user" type="User">
+  The authenticated user object. Set by Django's authentication middleware. Anonymous users are represented by `AnonymousUser`.
+</ResponseField>
+
+<ResponseField name="session" type="SessionStore">
+  A dictionary-like object for reading and writing session data. Set by Django's session middleware.
+</ResponseField>
+
+<ResponseField name="resolver_match" type="ResolverMatch">
+  An instance of `ResolverMatch` representing the resolved URL. Contains the view function, URL arguments, and URL name.
+</ResponseField>
+
+### Methods
+
+#### get_host()
+
+Return the originating host of the request.
+
+```python
+host = request.get_host()
+# Returns: 'example.com' or 'example.com:8000'
+```
+
+**Returns:** String hostname with optional port
+
+**Raises:** `DisallowedHost` if the host is not in `ALLOWED_HOSTS`
+
+---
+
+#### get_port()
+
+Return the port number for the request as a string.
+
+```python
+port = request.get_port()
+# Returns: '80', '443', or custom port
+```
+
+**Returns:** String port number
+
+---
+
+#### get_full_path(force_append_slash=False)
+
+Return the path plus query string.
+
+```python
+full_path = request.get_full_path()
+# Returns: '/articles/?page=2&sort=date'
+```
+
+<ParamField name="force_append_slash" type="bool" default="False">
+  Whether to append a trailing slash to the path if it doesn't have one
+</ParamField>
+
+**Returns:** String path with query string
+
+---
+
+#### get_full_path_info(force_append_slash=False)
+
+Like `get_full_path()`, but uses `path_info` instead of `path`.
+
+---
+
+#### build_absolute_uri(location=None)
+
+Build an absolute URI from the location and request variables.
+
+```python
+absolute_url = request.build_absolute_uri('/about/')
+# Returns: 'https://example.com/about/'
+
+# Without argument, returns current URL
+current_url = request.build_absolute_uri()
+# Returns: 'https://example.com/articles/?page=2'
+```
+
+<ParamField name="location" type="str" optional>
+  Path to convert to absolute URI. If None, uses the current request path.
+</ParamField>
+
+**Returns:** String absolute URI
+
+---
+
+#### is_secure()
+
+Return `True` if the request was made over HTTPS.
+
+```python
+if request.is_secure():
+    # Request was made over HTTPS
+    pass
+```
+
+**Returns:** Boolean
+
+---
+
+#### is_ajax()
+
+<Warning>
+Deprecated in Django 3.1. Check `request.headers.get('X-Requested-With') == 'XMLHttpRequest'` instead.
+</Warning>
+
+---
+
+#### get_signed_cookie(key, default=RAISE_ERROR, salt='', max_age=None)
+
+Return a signed cookie value. Raises an exception if the signature fails.
+
+```python
+try:
+    user_id = request.get_signed_cookie('user_id')
+except KeyError:
+    # Cookie doesn't exist
+    pass
+except BadSignature:
+    # Cookie was tampered with
+    pass
+```
+
+<ParamField name="key" type="str" required>
+  The cookie name
+</ParamField>
+
+<ParamField name="default" type="any" optional>
+  Value to return if cookie is missing or invalid. If not provided, raises an exception.
+</ParamField>
+
+<ParamField name="salt" type="str" optional>
+  Additional salt for the signature
+</ParamField>
+
+<ParamField name="max_age" type="int" optional>
+  Maximum age in seconds. Raises `SignatureExpired` if cookie is older.
+</ParamField>
+
+**Returns:** The cookie value
+
+**Raises:** `KeyError`, `BadSignature`, or `SignatureExpired`
+
+---
+
+#### accepts(media_type)
+
+Return `True` if the client accepts the given media type.
+
+```python
+if request.accepts('application/json'):
+    return JsonResponse(data)
+else:
+    return render(request, 'template.html', context)
+```
+
+<ParamField name="media_type" type="str" required>
+  MIME type to check (e.g., `'application/json'`, `'text/html'`)
+</ParamField>
+
+**Returns:** Boolean
+
+---
+
+#### get_preferred_type(media_types)
+
+Return the preferred media type from a list of options based on the Accept header.
+
+```python
+preferred = request.get_preferred_type(['text/html', 'application/json'])
+if preferred == 'application/json':
+    return JsonResponse(data)
+else:
+    return render(request, 'template.html', context)
+```
+
+<ParamField name="media_types" type="list" required>
+  List of MIME types to choose from
+</ParamField>
+
+**Returns:** String MIME type or `None`
+
+---
+
+### QueryDict
+
+A specialized `MultiValueDict` for handling query strings and form data. Keys may have multiple values.
+
+```python
+# GET /search/?tag=python&tag=django&q=views
+request.GET['q']              # 'views'
+request.GET['tag']            # 'django' (last value)
+request.GET.getlist('tag')    # ['python', 'django']
+```
+
+**Methods:**
+
+<ResponseField name="get(key, default=None)" type="method">
+  Return the last value for the given key
+</ResponseField>
+
+<ResponseField name="getlist(key)" type="method">
+  Return a list of all values for the given key
+</ResponseField>
+
+<ResponseField name="items()" type="method">
+  Return key-value pairs (only last value for each key)
+</ResponseField>
+
+<ResponseField name="lists()" type="method">
+  Return key-value pairs with all values as lists
+</ResponseField>
+
+<ResponseField name="urlencode()" type="method">
+  Return the query string representation
+</ResponseField>
+
+---
+
+## HttpResponse
+
+Represents an HTTP response to send back to the client.
+
+```python
+from django.http import HttpResponse
+
+def my_view(request):
+    response = HttpResponse('Hello, World!')
+    response['X-Custom-Header'] = 'value'
+    response.set_cookie('visited', 'yes')
+    return response
+```
+
+### Constructor
+
+```python
+HttpResponse(content=b'', content_type=None, status=200, reason=None, charset=None, headers=None)
+```
+
+<ParamField name="content" type="str | bytes" default="b''">
+  The response content. Strings are encoded using the charset.
+</ParamField>
+
+<ParamField name="content_type" type="str" optional>
+  MIME type for the response. Defaults to `'text/html; charset=utf-8'`
+</ParamField>
+
+<ParamField name="status" type="int" default="200">
+  HTTP status code (100-599)
+</ParamField>
+
+<ParamField name="reason" type="str" optional>
+  Custom reason phrase. If not provided, uses standard reason for status code.
+</ParamField>
+
+<ParamField name="charset" type="str" optional>
+  Character encoding. Defaults to `DEFAULT_CHARSET` setting.
+</ParamField>
+
+<ParamField name="headers" type="dict" optional>
+  Dictionary of HTTP headers to set
+</ParamField>
+
+### Attributes
+
+<ResponseField name="content" type="bytes">
+  The response body as bytes. Can be set to a string, bytes, or iterable.
+</ResponseField>
+
+<ResponseField name="text" type="str">
+  The response body decoded as text (read-only)
+</ResponseField>
+
+<ResponseField name="status_code" type="int">
+  The HTTP status code
+</ResponseField>
+
+<ResponseField name="reason_phrase" type="str">
+  The HTTP reason phrase (e.g., `'OK'`, `'Not Found'`)
+</ResponseField>
+
+<ResponseField name="charset" type="str">
+  The character encoding used
+</ResponseField>
+
+<ResponseField name="streaming" type="bool">
+  Whether this is a streaming response (always `False` for `HttpResponse`)
+</ResponseField>
+
+<ResponseField name="closed" type="bool">
+  Whether the response has been closed
+</ResponseField>
+
+<ResponseField name="headers" type="ResponseHeaders">
+  A case-insensitive dictionary-like object for HTTP headers
+</ResponseField>
+
+<ResponseField name="cookies" type="SimpleCookie">
+  A dictionary-like object containing cookies to set
+</ResponseField>
+
+### Methods
+
+#### set_cookie(key, value='', max_age=None, expires=None, path='/', domain=None, secure=False, httponly=False, samesite=None)
+
+Set a cookie on the response.
+
+```python
+response.set_cookie('session_id', 'abc123', max_age=3600)
+response.set_cookie('preferences', 'dark_mode', secure=True, httponly=True, samesite='Lax')
+```
+
+<ParamField name="key" type="str" required>
+  Cookie name
+</ParamField>
+
+<ParamField name="value" type="str" default="''">
+  Cookie value
+</ParamField>
+
+<ParamField name="max_age" type="int | timedelta" optional>
+  Maximum age in seconds or as a `timedelta`
+</ParamField>
+
+<ParamField name="expires" type="str | datetime" optional>
+  Expiration date as a string or `datetime` object
+</ParamField>
+
+<ParamField name="path" type="str" default="'/'">
+  Cookie path
+</ParamField>
+
+<ParamField name="domain" type="str" optional>
+  Cookie domain
+</ParamField>
+
+<ParamField name="secure" type="bool" default="False">
+  Whether cookie should only be sent over HTTPS
+</ParamField>
+
+<ParamField name="httponly" type="bool" default="False">
+  Whether cookie should be inaccessible to JavaScript
+</ParamField>
+
+<ParamField name="samesite" type="str" optional>
+  SameSite attribute: `'Lax'`, `'Strict'`, or `'None'`
+</ParamField>
+
+---
+
+#### set_signed_cookie(key, value, salt='', \*\*kwargs)
+
+Set a signed cookie (tamper-proof).
+
+```python
+response.set_signed_cookie('user_id', user.id, salt='user-cookie')
+```
+
+<ParamField name="key" type="str" required>
+  Cookie name
+</ParamField>
+
+<ParamField name="value" type="str" required>
+  Cookie value to sign
+</ParamField>
+
+<ParamField name="salt" type="str" optional>
+  Additional salt for the signature
+</ParamField>
+
+<ParamField name="**kwargs" type="dict">
+  Additional arguments passed to `set_cookie()`
+</ParamField>
+
+---
+
+#### delete_cookie(key, path='/', domain=None, samesite=None)
+
+Delete a cookie by setting its expiration in the past.
+
+```python
+response.delete_cookie('session_id')
+```
+
+<ParamField name="key" type="str" required>
+  Cookie name to delete
+</ParamField>
+
+---
+
+#### write(content)
+
+Append content to the response body.
+
+```python
+response = HttpResponse()
+response.write('Hello, ')
+response.write('World!')
+```
+
+<ParamField name="content" type="str | bytes" required>
+  Content to append
+</ParamField>
+
+---
+
+#### has_header(header)
+
+Return `True` if the response has the given header (case-insensitive).
+
+```python
+if response.has_header('Content-Type'):
+    pass
+```
+
+---
+
+#### setdefault(key, value)
+
+Set a header only if it doesn't already exist.
+
+```python
+response.setdefault('Cache-Control', 'no-cache')
+```
+
+---
+
+## Response Subclasses
+
+### JsonResponse
+
+An `HttpResponse` subclass for JSON responses.
+
+```python
+from django.http import JsonResponse
+
+def api_view(request):
+    data = {'status': 'success', 'items': [1, 2, 3]}
+    return JsonResponse(data)
+    
+    # Non-dict data requires safe=False
+    return JsonResponse(['item1', 'item2'], safe=False)
+```
+
+**Constructor:**
+
+```python
+JsonResponse(data, encoder=DjangoJSONEncoder, safe=True, json_dumps_params=None, **kwargs)
+```
+
+<ParamField name="data" type="dict | list" required>
+  Data to serialize as JSON
+</ParamField>
+
+<ParamField name="encoder" type="class" default="DjangoJSONEncoder">
+  JSON encoder class
+</ParamField>
+
+<ParamField name="safe" type="bool" default="True">
+  If `False`, allows serialization of non-dict objects. Set to `False` for lists/arrays.
+</ParamField>
+
+<ParamField name="json_dumps_params" type="dict" optional>
+  Additional parameters to pass to `json.dumps()`
+</ParamField>
+
+Automatically sets `Content-Type` to `application/json`.
+
+---
+
+### FileResponse
+
+A streaming response optimized for serving files.
+
+```python
+from django.http import FileResponse
+from pathlib import Path
+
+def download_file(request, filename):
+    file_path = Path('media') / filename
+    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
+```
+
+**Constructor:**
+
+```python
+FileResponse(streaming_content, as_attachment=False, filename='', **kwargs)
+```
+
+<ParamField name="streaming_content" type="file | iterator" required>
+  File-like object or iterator of bytes
+</ParamField>
+
+<ParamField name="as_attachment" type="bool" default="False">
+  If `True`, sets `Content-Disposition: attachment` to trigger download
+</ParamField>
+
+<ParamField name="filename" type="str" optional>
+  Filename for the download. Required if `as_attachment=True` and file object has no name.
+</ParamField>
+
+Automatically sets `Content-Type`, `Content-Length`, and `Content-Disposition` headers.
+
+---
+
+### StreamingHttpResponse
+
+A streaming response for large or dynamically generated content.
+
+```python
+from django.http import StreamingHttpResponse
+
+def stream_csv(request):
+    def generate_rows():
+        yield 'Header1,Header2\n'
+        for item in Item.objects.iterator():
+            yield f'{item.field1},{item.field2}\n'
+    
+    response = StreamingHttpResponse(generate_rows(), content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="data.csv"'
+    return response
+```
+
+**Constructor:**
+
+```python
+StreamingHttpResponse(streaming_content=(), **kwargs)
+```
+
+<ParamField name="streaming_content" type="iterator" default="()">
+  An iterator or generator that yields bytes or strings
+</ParamField>
+
+<Warning>
+Do not access `response.content` on a `StreamingHttpResponse` - it will raise an `AttributeError`.
+</Warning>
+
+---
+
+### Redirect Responses
+
+#### HttpResponseRedirect
+
+Temporary redirect (302).
+
+```python
+from django.http import HttpResponseRedirect
+
+return HttpResponseRedirect('/new-location/')
+```
+
+#### HttpResponsePermanentRedirect
+
+Permanent redirect (301).
+
+```python
+from django.http import HttpResponsePermanentRedirect
+
+return HttpResponsePermanentRedirect('/new-location/')
+```
+
+**Shortcut:**
+
+```python
+from django.shortcuts import redirect
+
+# Temporary redirect
+return redirect('/new-location/')
+return redirect('view-name', id=123)
+
+# Permanent redirect
+return redirect('/new-location/', permanent=True)
+```
+
+---
+
+### Error Responses
+
+<ResponseField name="HttpResponseBadRequest" type="class">
+  400 Bad Request
+</ResponseField>
+
+<ResponseField name="HttpResponseNotFound" type="class">
+  404 Not Found
+</ResponseField>
+
+<ResponseField name="HttpResponseForbidden" type="class">
+  403 Forbidden
+</ResponseField>
+
+<ResponseField name="HttpResponseNotAllowed" type="class">
+  405 Method Not Allowed
+</ResponseField>
+
+<ResponseField name="HttpResponseGone" type="class">
+  410 Gone
+</ResponseField>
+
+<ResponseField name="HttpResponseServerError" type="class">
+  500 Internal Server Error
+</ResponseField>
+
+```python
+from django.http import HttpResponseNotFound, HttpResponseForbidden
+
+if not obj.exists():
+    return HttpResponseNotFound('Object not found')
+
+if not request.user.has_perm('app.view_object'):
+    return HttpResponseForbidden('Permission denied')
+```

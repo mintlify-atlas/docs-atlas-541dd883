@@ -1,0 +1,467 @@
+---
+title: Validators
+description: Built-in validators for form and model field validation
+---
+
+## Overview
+
+Django provides a comprehensive set of validators to validate data in forms and model fields. All validators raise `ValidationError` when validation fails.
+
+## Email Validators
+
+### EmailValidator
+
+Validates that a value is a valid email address.
+
+```python
+from django.core.validators import EmailValidator
+
+validator = EmailValidator(
+    message=None,
+    code=None,
+    allowlist=None
+)
+```
+
+<ParamField path="message" type="str" default="'Enter a valid email address.'">
+  Custom error message for validation failures
+</ParamField>
+
+<ParamField path="code" type="str" default="'invalid'">
+  Error code for ValidationError
+</ParamField>
+
+<ParamField path="allowlist" type="list" default="['localhost']">
+  List of allowed domain names that bypass domain validation
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import EmailValidator, validate_email
+
+validator = EmailValidator()
+validator('user@example.com')  # Passes
+validator('invalid-email')     # Raises ValidationError
+
+# Pre-configured instance
+validate_email('user@example.com')
+```
+
+## URL Validators
+
+### URLValidator
+
+Validates that a value is a valid URL.
+
+```python
+from django.core.validators import URLValidator
+
+validator = URLValidator(
+    schemes=None,
+    regex=None,
+    message=None,
+    code=None,
+    inverse_match=None,
+    flags=None
+)
+```
+
+<ParamField path="schemes" type="list" default="['http', 'https', 'ftp', 'ftps']">
+  List of allowed URL schemes
+</ParamField>
+
+<ParamField path="message" type="str" default="'Enter a valid URL.'">
+  Custom error message
+</ParamField>
+
+<ParamField path="code" type="str" default="'invalid'">
+  Error code for ValidationError
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import URLValidator
+
+validator = URLValidator()
+validator('https://example.com')  # Passes
+validator('not a url')            # Raises ValidationError
+
+# Custom schemes
+validator = URLValidator(schemes=['http', 'https', 'git'])
+validator('git://github.com/repo')
+```
+
+## Value Validators
+
+### MinValueValidator
+
+Validates that a value is greater than or equal to a limit.
+
+```python
+from django.core.validators import MinValueValidator
+
+validator = MinValueValidator(
+    limit_value,
+    message=None
+)
+```
+
+<ParamField path="limit_value" type="int | float | callable" required>
+  Minimum value allowed (can be a callable that returns the limit)
+</ParamField>
+
+<ParamField path="message" type="str" default="'Ensure this value is greater than or equal to %(limit_value)s.'">
+  Custom error message
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import MinValueValidator
+
+validator = MinValueValidator(0)
+validator(5)   # Passes
+validator(-1)  # Raises ValidationError
+```
+
+### MaxValueValidator
+
+Validates that a value is less than or equal to a limit.
+
+```python
+from django.core.validators import MaxValueValidator
+
+validator = MaxValueValidator(
+    limit_value,
+    message=None
+)
+```
+
+<ParamField path="limit_value" type="int | float | callable" required>
+  Maximum value allowed (can be a callable that returns the limit)
+</ParamField>
+
+<ParamField path="message" type="str" default="'Ensure this value is less than or equal to %(limit_value)s.'">
+  Custom error message
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import MaxValueValidator
+
+validator = MaxValueValidator(100)
+validator(50)   # Passes
+validator(150)  # Raises ValidationError
+```
+
+### StepValueValidator
+
+Validates that a value is a multiple of a step size.
+
+```python
+from django.core.validators import StepValueValidator
+
+validator = StepValueValidator(
+    limit_value,
+    message=None,
+    offset=None
+)
+```
+
+<ParamField path="limit_value" type="int | float" required>
+  Step size value
+</ParamField>
+
+<ParamField path="message" type="str" default="'Ensure this value is a multiple of step size %(limit_value)s.'">
+  Custom error message
+</ParamField>
+
+<ParamField path="offset" type="int | float" default="None">
+  Starting offset for the step sequence
+</ParamField>
+
+## Length Validators
+
+### MinLengthValidator
+
+Validates that a value has at least a minimum length.
+
+```python
+from django.core.validators import MinLengthValidator
+
+validator = MinLengthValidator(
+    limit_value,
+    message=None
+)
+```
+
+<ParamField path="limit_value" type="int" required>
+  Minimum length required
+</ParamField>
+
+<ParamField path="message" type="str" default="'Ensure this value has at least %(limit_value)d characters.'">
+  Custom error message
+</ParamField>
+
+### MaxLengthValidator
+
+Validates that a value does not exceed a maximum length.
+
+```python
+from django.core.validators import MaxLengthValidator
+
+validator = MaxLengthValidator(
+    limit_value,
+    message=None
+)
+```
+
+<ParamField path="limit_value" type="int" required>
+  Maximum length allowed
+</ParamField>
+
+<ParamField path="message" type="str" default="'Ensure this value has at most %(limit_value)d characters.'">
+  Custom error message
+</ParamField>
+
+## Regex Validators
+
+### RegexValidator
+
+Validates that a value matches a regular expression.
+
+```python
+from django.core.validators import RegexValidator
+
+validator = RegexValidator(
+    regex=None,
+    message=None,
+    code=None,
+    inverse_match=None,
+    flags=None
+)
+```
+
+<ParamField path="regex" type="str | Pattern" default="''">
+  Regular expression pattern to match
+</ParamField>
+
+<ParamField path="message" type="str" default="'Enter a valid value.'">
+  Custom error message
+</ParamField>
+
+<ParamField path="code" type="str" default="'invalid'">
+  Error code for ValidationError
+</ParamField>
+
+<ParamField path="inverse_match" type="bool" default="False">
+  If True, validation fails if the regex matches
+</ParamField>
+
+<ParamField path="flags" type="int" default="0">
+  Regular expression flags (e.g., re.IGNORECASE)
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import RegexValidator
+import re
+
+validator = RegexValidator(
+    regex=r'^[0-9]+$',
+    message='Only digits are allowed',
+    code='invalid_digits'
+)
+validator('12345')  # Passes
+validator('abc')    # Raises ValidationError
+```
+
+## Decimal Validators
+
+### DecimalValidator
+
+Validates that a decimal value doesn't exceed maximum digits and decimal places.
+
+```python
+from django.core.validators import DecimalValidator
+
+validator = DecimalValidator(
+    max_digits,
+    decimal_places
+)
+```
+
+<ParamField path="max_digits" type="int" required>
+  Maximum number of total digits allowed
+</ParamField>
+
+<ParamField path="decimal_places" type="int" required>
+  Maximum number of decimal places allowed
+</ParamField>
+
+**Usage:**
+```python
+from decimal import Decimal
+from django.core.validators import DecimalValidator
+
+validator = DecimalValidator(max_digits=5, decimal_places=2)
+validator(Decimal('123.45'))  # Passes
+validator(Decimal('1234.567'))  # Raises ValidationError
+```
+
+## File Validators
+
+### FileExtensionValidator
+
+Validates that a file extension is in an allowed list.
+
+```python
+from django.core.validators import FileExtensionValidator
+
+validator = FileExtensionValidator(
+    allowed_extensions=None,
+    message=None,
+    code=None
+)
+```
+
+<ParamField path="allowed_extensions" type="list" default="None">
+  List of allowed file extensions (without dots)
+</ParamField>
+
+<ParamField path="message" type="str" default="'File extension is not allowed.'">
+  Custom error message with `%(extension)s` placeholder
+</ParamField>
+
+<ParamField path="code" type="str" default="'invalid_extension'">
+  Error code for ValidationError
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import FileExtensionValidator, validate_image_file_extension
+
+validator = FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx'])
+
+# Pre-configured for images
+validate_image_file_extension(uploaded_file)
+```
+
+## IP Address Validators
+
+### validate_ipv4_address
+
+Validates that a value is a valid IPv4 address.
+
+```python
+from django.core.validators import validate_ipv4_address
+
+validate_ipv4_address(value)
+```
+
+<ParamField path="value" type="str" required>
+  The IP address string to validate
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import validate_ipv4_address
+
+validate_ipv4_address('192.168.1.1')  # Passes
+validate_ipv4_address('256.0.0.1')    # Raises ValidationError
+```
+
+### validate_ipv6_address
+
+Validates that a value is a valid IPv6 address.
+
+```python
+from django.core.validators import validate_ipv6_address
+
+validate_ipv6_address(value)
+```
+
+<ParamField path="value" type="str" required>
+  The IP address string to validate
+</ParamField>
+
+**Usage:**
+```python
+from django.core.validators import validate_ipv6_address
+
+validate_ipv6_address('::1')  # Passes
+validate_ipv6_address('invalid')  # Raises ValidationError
+```
+
+### validate_ipv46_address
+
+Validates that a value is either a valid IPv4 or IPv6 address.
+
+```python
+from django.core.validators import validate_ipv46_address
+
+validate_ipv46_address(value)
+```
+
+<ParamField path="value" type="str" required>
+  The IP address string to validate
+</ParamField>
+
+## Other Validators
+
+### validate_slug
+
+Validates that a value is a valid slug (letters, numbers, underscores, hyphens).
+
+```python
+from django.core.validators import validate_slug
+
+validate_slug(value)
+```
+
+### validate_unicode_slug
+
+Validates that a value is a valid Unicode slug.
+
+```python
+from django.core.validators import validate_unicode_slug
+
+validate_unicode_slug(value)
+```
+
+### validate_comma_separated_integer_list
+
+Validates that a value is a comma-separated list of integers.
+
+```python
+from django.core.validators import validate_comma_separated_integer_list
+
+validate_comma_separated_integer_list('1,2,3,4')  # Passes
+validate_comma_separated_integer_list('1,a,3')    # Raises ValidationError
+```
+
+### ProhibitNullCharactersValidator
+
+Validates that a string doesn't contain null characters.
+
+```python
+from django.core.validators import ProhibitNullCharactersValidator
+
+validator = ProhibitNullCharactersValidator(
+    message=None,
+    code=None
+)
+```
+
+<ParamField path="message" type="str" default="'Null characters are not allowed.'">
+  Custom error message
+</ParamField>
+
+<ParamField path="code" type="str" default="'null_characters_not_allowed'">
+  Error code for ValidationError
+</ParamField>
+
+## See Also
+
+- [Form Fields](/api/forms/fields) - Using validators with form fields
+- [Model Fields](/api/models/fields) - Using validators with model fields
+- [ValidationError](/api/exceptions#validationerror) - Exception raised by validators

@@ -1,0 +1,520 @@
+---
+title: PostgreSQL Features
+description: PostgreSQL-specific database features and field types
+---
+
+The `django.contrib.postgres` module provides PostgreSQL-specific functionality including specialized field types, aggregates, and database features.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.postgres',
+    # Other apps
+]
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mydb',
+        'USER': 'postgres',
+        'PASSWORD': 'password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+```
+
+## Array Fields
+
+Store arrays of values. Defined in `django.contrib.postgres.fields.ArrayField`:
+
+```python models.py
+from django.contrib.postgres.fields import ArrayField
+from django.db import models
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    
+    # Array of tags
+    tags = ArrayField(
+        models.CharField(max_length=50),
+        size=10,  # Optional max size
+        default=list,  # Default to empty list
+    )
+    
+    # Array of integers
+    ratings = ArrayField(
+        models.IntegerField(),
+        default=list,
+    )
+    
+    # Nested array (2D)
+    matrix = ArrayField(
+        ArrayField(
+            models.IntegerField(),
+            size=5,
+        ),
+        size=5,
+    )
+```
+
+### Using Array Fields
+
+```python
+from myapp.models import Article
+
+# Create with array data
+article = Article.objects.create(
+    title='Django Tutorial',
+    tags=['python', 'django', 'web'],
+    ratings=[5, 4, 5, 5]
+)
+
+# Update array
+article.tags.append('tutorial')
+article.save()
+
+# Query array fields
+# Contains
+articles = Article.objects.filter(tags__contains=['python'])
+
+# Contained by
+articles = Article.objects.filter(tags__contained_by=['python', 'django', 'web', 'tutorial'])
+
+# Overlap
+articles = Article.objects.filter(tags__overlap=['python', 'javascript'])
+
+# Length
+articles = Article.objects.filter(tags__len=3)
+
+# Index access
+articles = Article.objects.filter(tags__0='python')  # First element
+
+# Slice
+articles = Article.objects.filter(tags__0_2=['python', 'django'])  # First 2 elements
+```
+
+## JSON Fields
+
+Store JSON data:
+
+```python models.py
+from django.db import models
+
+class Product(models.Model):
+    name = models.CharField(max_length=200)
+    
+    # JSON field
+    metadata = models.JSONField(default=dict)
+    
+    # With default value
+    settings = models.JSONField(default=dict, blank=True)
+```
+
+### Using JSON Fields
+
+```python
+# Create with JSON data
+product = Product.objects.create(
+    name='Laptop',
+    metadata={
+        'brand': 'Dell',
+        'specs': {
+            'cpu': 'Intel i7',
+            'ram': '16GB',
+            'storage': '512GB SSD'
+        },
+        'features': ['backlit keyboard', 'fingerprint sensor']
+    }
+)
+
+# Query JSON fields
+# Key lookup
+products = Product.objects.filter(metadata__brand='Dell')
+
+# Nested key lookup
+products = Product.objects.filter(metadata__specs__cpu='Intel i7')
+
+# Contains
+products = Product.objects.filter(
+    metadata__contains={'brand': 'Dell'}
+)
+
+# Contained by
+products = Product.objects.filter(
+    metadata__contained_by={'brand': 'Dell', 'price': 1000}
+)
+
+# Has key
+products = Product.objects.filter(metadata__has_key='brand')
+
+# Has any keys
+products = Product.objects.filter(
+    metadata__has_any_keys=['brand', 'model']
+)
+
+# Has all keys
+products = Product.objects.filter(
+    metadata__has_keys=['brand', 'specs']
+)
+```
+
+## Range Fields
+
+Store ranges of values:
+
+```python models.py
+from django.contrib.postgres.fields import (
+    IntegerRangeField,
+    BigIntegerRangeField,
+    DecimalRangeField,
+    DateRangeField,
+    DateTimeRangeField,
+)
+from django.db import models
+
+class Event(models.Model):
+    name = models.CharField(max_length=200)
+    
+    # Date range
+    duration = DateRangeField()
+    
+    # Integer range (e.g., age group)
+    age_range = IntegerRangeField()
+    
+    # Price range
+    price_range = DecimalRangeField()
+```
+
+### Using Range Fields
+
+```python
+from datetime import date
+from django.db.models import DateRange, NumericRange
+
+# Create with range
+event = Event.objects.create(
+    name='Conference',
+    duration=DateRange(date(2024, 1, 10), date(2024, 1, 12)),
+    age_range=NumericRange(18, 65),
+    price_range=NumericRange(100, 500)
+)
+
+# Query ranges
+# Contains value
+events = Event.objects.filter(
+    duration__contains=date(2024, 1, 11)
+)
+
+# Contains range
+events = Event.objects.filter(
+    duration__contains=DateRange(date(2024, 1, 10), date(2024, 1, 11))
+)
+
+# Overlaps
+events = Event.objects.filter(
+    duration__overlap=DateRange(date(2024, 1, 5), date(2024, 1, 15))
+)
+
+# Fully contained by
+events = Event.objects.filter(
+    duration__contained_by=DateRange(date(2024, 1, 1), date(2024, 12, 31))
+)
+
+# Start/end comparisons
+events = Event.objects.filter(duration__startswith=date(2024, 1, 10))
+events = Event.objects.filter(duration__endswith=date(2024, 1, 12))
+```
+
+## HStore Field
+
+Store key-value pairs:
+
+```python models.py
+from django.contrib.postgres.fields import HStoreField
+from django.db import models
+
+class Product(models.Model):
+    name = models.CharField(max_length=200)
+    attributes = HStoreField(default=dict)
+```
+
+```python
+# Create
+product = Product.objects.create(
+    name='T-Shirt',
+    attributes={
+        'color': 'blue',
+        'size': 'L',
+        'material': 'cotton'
+    }
+)
+
+# Query
+products = Product.objects.filter(attributes__color='blue')
+products = Product.objects.filter(attributes__has_key='size')
+```
+
+## Full-Text Search
+
+```python models.py
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
+from django.db import models
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+```
+
+### Basic Search
+
+```python views.py
+from django.contrib.postgres.search import SearchVector
+from myapp.models import Article
+
+# Search in title and content
+articles = Article.objects.annotate(
+    search=SearchVector('title', 'content'),
+).filter(search='django')
+```
+
+### Advanced Search
+
+```python
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+
+# Create search vector
+vector = SearchVector('title', weight='A') + SearchVector('content', weight='B')
+
+# Create search query
+query = SearchQuery('django')
+
+# Rank results
+articles = Article.objects.annotate(
+    rank=SearchRank(vector, query)
+).filter(rank__gte=0.3).order_by('-rank')
+```
+
+### SearchVectorField
+
+```python models.py
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    search_vector = SearchVectorField(null=True)
+    
+    class Meta:
+        indexes = [
+            GinIndex(fields=['search_vector']),
+        ]
+```
+
+```python
+# Update search vector
+from django.contrib.postgres.search import SearchVector
+
+Article.objects.update(
+    search_vector=SearchVector('title', 'content')
+)
+
+# Query
+from django.contrib.postgres.search import SearchQuery
+
+articles = Article.objects.filter(
+    search_vector=SearchQuery('django')
+)
+```
+
+## Aggregates
+
+```python
+from django.contrib.postgres.aggregates import (
+    ArrayAgg, StringAgg, JSONBAgg
+)
+
+# Array aggregate
+from myapp.models import Author
+
+authors = Author.objects.aggregate(
+    all_books=ArrayAgg('books__title')
+)
+
+# String aggregate
+authors = Author.objects.aggregate(
+    book_list=StringAgg('books__title', delimiter=', ')
+)
+
+# JSON aggregate
+authors = Author.objects.aggregate(
+    books_json=JSONBAgg('books__title')
+)
+```
+
+## Indexes
+
+```python models.py
+from django.contrib.postgres.indexes import (
+    BrinIndex, BTreeIndex, GinIndex, GistIndex, HashIndex, SpGistIndex
+)
+from django.db import models
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    tags = ArrayField(models.CharField(max_length=50))
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            # GIN index for array fields
+            GinIndex(fields=['tags']),
+            
+            # BRIN index for sequential data
+            BrinIndex(fields=['created_at']),
+            
+            # B-Tree index (default)
+            BTreeIndex(fields=['title']),
+        ]
+```
+
+## Constraints
+
+```python models.py
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateRangeField, RangeOperators
+from django.db import models
+
+class Booking(models.Model):
+    room = models.IntegerField()
+    during = DateRangeField()
+    
+    class Meta:
+        constraints = [
+            # Prevent overlapping bookings
+            ExclusionConstraint(
+                name='exclude_overlapping_bookings',
+                expressions=[
+                    ('room', RangeOperators.EQUAL),
+                    ('during', RangeOperators.OVERLAPS),
+                ],
+            ),
+        ]
+```
+
+## Database Functions
+
+```python
+from django.contrib.postgres.functions import RandomUUID, TransactionNow
+
+# Generate UUID
+from myapp.models import Article
+
+article = Article.objects.create(
+    id=RandomUUID(),
+    title='New Article'
+)
+
+# Current transaction time
+articles = Article.objects.filter(
+    created_at__lte=TransactionNow()
+)
+```
+
+## Trigram Similarity
+
+```python models.py
+from django.contrib.postgres.operations import TrigramExtension
+from django.db import migrations
+
+class Migration(migrations.Migration):
+    operations = [
+        TrigramExtension(),
+    ]
+```
+
+```python views.py
+from django.contrib.postgres.search import TrigramSimilarity
+
+# Search with similarity
+articles = Article.objects.annotate(
+    similarity=TrigramSimilarity('title', 'django tutorail'),  # typo
+).filter(similarity__gt=0.3).order_by('-similarity')
+```
+
+## Validators
+
+```python models.py
+from django.contrib.postgres.validators import (
+    KeysValidator,
+    RangeMaxValueValidator,
+    RangeMinValueValidator,
+)
+from django.contrib.postgres.fields import ArrayField, IntegerRangeField
+from django.db import models
+
+class Product(models.Model):
+    metadata = models.JSONField(
+        validators=[KeysValidator(['brand', 'model'])]
+    )
+    
+    age_range = IntegerRangeField(
+        validators=[
+            RangeMinValueValidator(0),
+            RangeMaxValueValidator(120),
+        ]
+    )
+```
+
+## Forms
+
+```python forms.py
+from django import forms
+from django.contrib.postgres.forms import (
+    SimpleArrayField,
+    SplitDateTimeRangeField,
+    IntegerRangeField,
+)
+
+class ArticleForm(forms.Form):
+    tags = SimpleArrayField(
+        forms.CharField(max_length=50),
+        delimiter=',',
+    )
+    
+    age_range = IntegerRangeField()
+    
+    event_duration = SplitDateTimeRangeField()
+```
+
+## Key Classes Reference
+
+### ArrayField
+
+Location: `django.contrib.postgres.fields.ArrayField`
+
+Stores arrays of a base field type.
+
+### JSONField
+
+Location: `django.db.models.JSONField`
+
+Stores JSON data (available in core Django, enhanced by postgres).
+
+### Range Fields
+
+Location: `django.contrib.postgres.fields`
+
+Includes `IntegerRangeField`, `DateRangeField`, `DateTimeRangeField`, etc.
+
+### SearchVector
+
+Location: `django.contrib.postgres.search.SearchVector`
+
+Creates full-text search vectors.
+
+<Note>
+PostgreSQL-specific features require PostgreSQL 9.6 or higher. Some features like JSONField are now available in core Django for all databases.
+</Note>

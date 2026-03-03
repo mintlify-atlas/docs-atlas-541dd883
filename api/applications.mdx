@@ -1,0 +1,309 @@
+---
+title: Applications
+description: Django application configuration and registry
+---
+
+Django applications are Python packages with models, views, templates, and other components. The app registry manages these applications.
+
+## AppConfig
+
+Class representing a Django application and its configuration.
+
+### Class Definition
+
+```python
+from django.apps import AppConfig
+
+class MyAppConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'myapp'
+    verbose_name = 'My Application'
+```
+
+### Attributes
+
+<ParamField path="name" type="string" required>
+  Full Python path to the application (e.g., `'django.contrib.admin'`).
+</ParamField>
+
+<ParamField path="label" type="string">
+  Short name for the application (e.g., `'admin'`). Must be unique across a Django project. Defaults to the last component of `name`.
+</ParamField>
+
+<ParamField path="verbose_name" type="string">
+  Human-readable name for the application (e.g., "Administration"). Defaults to `label.title()`.
+</ParamField>
+
+<ParamField path="path" type="string">
+  Filesystem path to the application directory (e.g., `'/path/to/django/contrib/admin'`).
+</ParamField>
+
+<ParamField path="default_auto_field" type="string">
+  Default type of auto-created primary key fields for models in this app.
+  
+  Default: Value from `settings.DEFAULT_AUTO_FIELD`
+</ParamField>
+
+<ParamField path="models_module" type="module">
+  Module containing models. Set by `import_models()`. `None` if the app doesn't have a models module.
+</ParamField>
+
+<ParamField path="models" type="dict">
+  Mapping of lowercase model names to model classes. Initially `None` to prevent access before `import_models()` runs.
+</ParamField>
+
+### Methods
+
+#### create()
+
+Factory method that creates an app config from an entry in `INSTALLED_APPS`.
+
+```python
+app_config = AppConfig.create('myapp')
+app_config = AppConfig.create('myapp.apps.MyAppConfig')
+```
+
+<ParamField path="entry" type="string" required>
+  Application path or `AppConfig` class path from `INSTALLED_APPS`.
+</ParamField>
+
+Returns an `AppConfig` instance.
+
+#### get_model()
+
+Returns the model with the given case-insensitive model name.
+
+```python
+from django.apps import apps
+
+app_config = apps.get_app_config('myapp')
+MyModel = app_config.get_model('MyModel')
+```
+
+<ParamField path="model_name" type="string" required>
+  Case-insensitive model name.
+</ParamField>
+
+<ParamField path="require_ready" type="bool">
+  Whether to check if models are ready. Default: `True`
+</ParamField>
+
+Raises `LookupError` if no model exists with this name.
+
+#### get_models()
+
+Returns an iterable of models.
+
+```python
+app_config = apps.get_app_config('myapp')
+for model in app_config.get_models():
+    print(model.__name__)
+```
+
+<ParamField path="include_auto_created" type="bool">
+  Include auto-created models for many-to-many relations. Default: `False`
+</ParamField>
+
+<ParamField path="include_swapped" type="bool">
+  Include models that have been swapped out. Default: `False`
+</ParamField>
+
+#### ready()
+
+Override this method in subclasses to run code when Django starts.
+
+```python
+class MyAppConfig(AppConfig):
+    name = 'myapp'
+    
+    def ready(self):
+        # Import signal handlers
+        import myapp.signals
+```
+
+<Note>
+The `ready()` method is called after all models are imported. Don't perform database queries here as the database may not be ready.
+</Note>
+
+## App Registry
+
+The global `apps` registry stores the configuration of installed applications.
+
+```python
+from django.apps import apps
+```
+
+### Methods
+
+#### get_app_config()
+
+Returns an app config for the given label.
+
+```python
+from django.apps import apps
+
+app_config = apps.get_app_config('admin')
+print(app_config.name)  # 'django.contrib.admin'
+print(app_config.verbose_name)  # 'Administration'
+```
+
+<ParamField path="app_label" type="string" required>
+  Application label (e.g., `'admin'`, `'auth'`).
+</ParamField>
+
+Raises `LookupError` if no application exists with this label.
+
+#### get_app_configs()
+
+Returns an iterable of all app configs.
+
+```python
+from django.apps import apps
+
+for app_config in apps.get_app_configs():
+    print(f"{app_config.label}: {app_config.name}")
+```
+
+#### get_model()
+
+Returns the model matching the given app label and model name.
+
+```python
+from django.apps import apps
+
+# Using app_label and model_name
+User = apps.get_model('auth', 'User')
+
+# Using app_label.ModelName shortcut
+User = apps.get_model('auth.User')
+```
+
+<ParamField path="app_label" type="string" required>
+  Application label or `app_label.ModelName` string.
+</ParamField>
+
+<ParamField path="model_name" type="string">
+  Case-insensitive model name. Not required if using `app_label.ModelName` format.
+</ParamField>
+
+<ParamField path="require_ready" type="bool">
+  Whether to check if models are ready. Default: `True`
+</ParamField>
+
+Raises `LookupError` if the application or model doesn't exist.
+
+#### get_models()
+
+Returns a list of all installed models.
+
+```python
+from django.apps import apps
+
+all_models = apps.get_models()
+for model in all_models:
+    print(f"{model._meta.app_label}.{model.__name__}")
+```
+
+<ParamField path="include_auto_created" type="bool">
+  Include auto-created models for many-to-many relations. Default: `False`
+</ParamField>
+
+<ParamField path="include_swapped" type="bool">
+  Include models that have been swapped out. Default: `False`
+</ParamField>
+
+#### is_installed()
+
+Checks whether an application with this name exists in the registry.
+
+```python
+from django.apps import apps
+
+if apps.is_installed('django.contrib.admin'):
+    print("Admin is installed")
+```
+
+<ParamField path="app_name" type="string" required>
+  Full name of the app (e.g., `'django.contrib.admin'`).
+</ParamField>
+
+#### check_apps_ready()
+
+Raises `AppRegistryNotReady` exception if all apps haven't been imported yet.
+
+```python
+from django.apps import apps
+
+try:
+    apps.check_apps_ready()
+except AppRegistryNotReady:
+    print("Apps are not ready yet")
+```
+
+#### check_models_ready()
+
+Raises `AppRegistryNotReady` exception if all models haven't been imported yet.
+
+```python
+from django.apps import apps
+
+try:
+    apps.check_models_ready()
+except AppRegistryNotReady:
+    print("Models are not ready yet")
+```
+
+## Example: Custom AppConfig
+
+```python
+# myapp/apps.py
+from django.apps import AppConfig
+
+class MyAppConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'myapp'
+    verbose_name = 'My Application'
+    
+    def ready(self):
+        # Register signal handlers
+        from . import signals
+        
+        # Perform startup tasks
+        print(f"{self.verbose_name} is ready!")
+```
+
+```python
+# settings.py
+INSTALLED_APPS = [
+    'myapp.apps.MyAppConfig',  # Use custom config
+    # or just 'myapp'  # Django will auto-discover MyAppConfig
+]
+```
+
+## Example: Using the App Registry
+
+```python
+from django.apps import apps
+
+# Get a specific app config
+admin_config = apps.get_app_config('admin')
+print(admin_config.verbose_name)  # 'Administration'
+
+# Get a model
+User = apps.get_model('auth', 'User')
+# or
+User = apps.get_model('auth.User')
+
+# List all models in an app
+auth_config = apps.get_app_config('auth')
+for model in auth_config.get_models():
+    print(model.__name__)
+
+# Check if an app is installed
+if apps.is_installed('django.contrib.admin'):
+    print("Admin is available")
+
+# Iterate over all installed apps
+for app_config in apps.get_app_configs():
+    print(f"{app_config.label}: {app_config.path}")
+```

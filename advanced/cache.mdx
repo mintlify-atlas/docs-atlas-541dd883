@@ -1,0 +1,475 @@
+---
+title: "Cache Framework"
+description: "Learn how to use Django's cache framework, configure cache backends, and implement per-view and template fragment caching"
+---
+
+## Introduction
+
+Django includes a robust caching framework that lets you save dynamic pages to avoid recalculating them. The cache framework is flexible and supports multiple backends.
+
+## Cache Backends
+
+Django supports several cache backends out of the box:
+
+### Available Backends
+
+```python
+# settings.py
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+    },
+    'memcached': {
+        'BACKEND': 'django.core.cache.backends.memcached.PyMemcacheCache',
+        'LOCATION': '127.0.0.1:11211',
+    },
+    'locmem': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    },
+    'filebased': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': '/var/tmp/django_cache',
+    },
+    'dummy': {
+        'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+    },
+    'database': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'my_cache_table',
+    }
+}
+```
+
+### Backend Configuration
+
+```python
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'TIMEOUT': 300,  # Default timeout (seconds)
+        'KEY_PREFIX': 'myapp',  # Prefix for all keys
+        'VERSION': 1,  # Cache version
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+            'CULL_FREQUENCY': 3,  # Fraction of entries to cull
+        }
+    }
+}
+```
+
+<Note>
+The default cache alias is `"default"`. Django uses this cache automatically unless you specify otherwise.
+</Note>
+
+## Using the Cache
+
+### Basic Cache Operations
+
+```python
+from django.core.cache import cache
+
+# Set a value
+cache.set('my_key', 'my_value', timeout=300)  # 5 minutes
+
+# Get a value
+value = cache.get('my_key')
+
+# Get with default
+value = cache.get('my_key', default='default_value')
+
+# Add (only sets if key doesn't exist)
+cache.add('my_key', 'value', timeout=300)
+
+# Get or set (atomic operation)
+value = cache.get_or_set('my_key', 'default', timeout=300)
+
+# Delete
+cache.delete('my_key')
+
+# Delete multiple keys
+cache.delete_many(['key1', 'key2', 'key3'])
+
+# Clear entire cache
+cache.clear()
+
+# Check if key exists
+if 'my_key' in cache:
+    print("Key exists")
+```
+
+### Multiple Caches
+
+```python
+from django.core.cache import caches
+
+# Access specific cache
+redis_cache = caches['default']
+memcache = caches['memcached']
+
+# Use specific cache
+redis_cache.set('key', 'value')
+memcache.set('key', 'value')
+```
+
+### Cache Key Functions
+
+```python
+from django.core.cache.backends.base import default_key_func
+
+def default_key_func(key, key_prefix, version):
+    """
+    Default function to generate keys.
+    Construct the key used by all other methods.
+    """
+    return "%s:%s:%s" % (key_prefix, version, key)
+
+# Custom key function
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'KEY_FUNCTION': 'myapp.utils.make_cache_key',
+    }
+}
+```
+
+## Per-View Caching
+
+Cache entire view responses using the `cache_page` decorator.
+
+### Function-Based Views
+
+```python
+from django.views.decorators.cache import cache_page
+from django.http import HttpResponse
+
+@cache_page(60 * 15)  # Cache for 15 minutes
+def my_view(request):
+    # Expensive computation
+    result = expensive_operation()
+    return HttpResponse(result)
+
+# Specify cache backend
+@cache_page(60 * 15, cache="special_cache")
+def special_view(request):
+    return HttpResponse("Cached in special cache")
+
+# With key prefix
+@cache_page(60 * 15, key_prefix="site1")
+def site_view(request):
+    return HttpResponse("Site specific cache")
+```
+
+### Class-Based Views
+
+```python
+from django.views.decorators.cache import cache_page
+from django.utils.decorators import method_decorator
+from django.views.generic import ListView
+from myapp.models import Article
+
+@method_decorator(cache_page(60 * 15), name='dispatch')
+class ArticleListView(ListView):
+    model = Article
+    template_name = 'articles/list.html'
+
+# Or in URLconf
+from django.urls import path
+
+urlpatterns = [
+    path('articles/', cache_page(60 * 15)(ArticleListView.as_view())),
+]
+```
+
+### Async Views
+
+The `cache_page` decorator works automatically with async views:
+
+```python
+from django.views.decorators.cache import cache_page
+from django.http import JsonResponse
+
+@cache_page(60 * 5)
+async def async_api_view(request):
+    # Async operation
+    data = await fetch_data()
+    return JsonResponse(data)
+```
+
+<Tip>
+Per-view caching uses the URL to create cache keys. Query parameters and Vary headers affect the cache key.
+</Tip>
+
+## Cache Control Headers
+
+### Using cache_control Decorator
+
+```python
+from django.views.decorators.cache import cache_control
+from django.http import HttpResponse
+
+@cache_control(private=True, max_age=3600)
+def private_view(request):
+    return HttpResponse("Private content")
+
+@cache_control(public=True, max_age=7200, s_maxage=3600)
+def public_view(request):
+    return HttpResponse("Public content")
+
+@cache_control(no_cache=True, no_store=True, must_revalidate=True)
+def no_cache_view(request):
+    return HttpResponse("Never cached")
+```
+
+### Never Cache Decorator
+
+```python
+from django.views.decorators.cache import never_cache
+
+@never_cache
+def sensitive_view(request):
+    # This response will have headers preventing caching
+    return HttpResponse("Sensitive data")
+```
+
+The decorator implementation from Django source:
+
+```python
+from django.utils.cache import add_never_cache_headers
+from inspect import iscoroutinefunction
+from functools import wraps
+
+def never_cache(view_func):
+    """Decorator that adds headers to prevent caching."""
+    if iscoroutinefunction(view_func):
+        async def _view_wrapper(request, *args, **kwargs):
+            response = await view_func(request, *args, **kwargs)
+            add_never_cache_headers(response)
+            return response
+    else:
+        def _view_wrapper(request, *args, **kwargs):
+            response = view_func(request, *args, **kwargs)
+            add_never_cache_headers(response)
+            return response
+    return wraps(view_func)(_view_wrapper)
+```
+
+## Template Fragment Caching
+
+Cache portions of templates using the `{% cache %}` template tag.
+
+### Basic Template Caching
+
+```django
+{% load cache %}
+
+{% cache 500 sidebar %}
+    <!-- This content is cached for 500 seconds -->
+    <ul>
+    {% for item in menu_items %}
+        <li>{{ item.name }}</li>
+    {% endfor %}
+    </ul>
+{% endcache %}
+```
+
+### Variable-Based Cache Keys
+
+```django
+{% load cache %}
+
+<!-- Cache per user -->
+{% cache 600 sidebar request.user.username %}
+    <p>Welcome, {{ request.user.username }}!</p>
+    <!-- User-specific content -->
+{% endcache %}
+
+<!-- Cache with multiple variables -->
+{% cache 300 article_detail article.id article.updated_at %}
+    <h1>{{ article.title }}</h1>
+    <p>{{ article.content }}</p>
+{% endcache %}
+```
+
+### Using Specific Cache Backend
+
+```django
+{% load cache %}
+
+{% cache 500 sidebar using="special_cache" %}
+    <!-- Cached in 'special_cache' backend -->
+    <div>Sidebar content</div>
+{% endcache %}
+```
+
+<Warning>
+Be careful with template fragment caching when content depends on request-specific data. Always include variables that affect the content in the cache key.
+</Warning>
+
+## Low-Level Cache API
+
+### Advanced Operations
+
+```python
+from django.core.cache import cache
+
+# Set multiple values at once
+cache.set_many({
+    'key1': 'value1',
+    'key2': 'value2',
+    'key3': 'value3'
+}, timeout=300)
+
+# Get multiple values
+values = cache.get_many(['key1', 'key2', 'key3'])
+# Returns: {'key1': 'value1', 'key2': 'value2', 'key3': 'value3'}
+
+# Increment/Decrement (atomic operations)
+cache.set('counter', 0)
+cache.incr('counter')  # Returns 1
+cache.incr('counter', delta=5)  # Returns 6
+cache.decr('counter')  # Returns 5
+cache.decr('counter', delta=3)  # Returns 2
+
+# Touch (update expiration without changing value)
+cache.touch('my_key', timeout=600)
+
+# Close connections (automatic at request end)
+cache.close()
+```
+
+### Cache Versioning
+
+```python
+# Set with version
+cache.set('key', 'value', version=2)
+
+# Get with version
+value = cache.get('key', version=2)
+
+# Increment version (invalidates old cache)
+cache.incr_version('key')  # Returns new version number
+cache.decr_version('key')  # Returns new version number
+```
+
+## Database Caching Setup
+
+To use database caching, create the cache table:
+
+```bash
+# Create cache table
+python manage.py createcachetable
+
+# Create specific table
+python manage.py createcachetable my_cache_table
+```
+
+```python
+# settings.py
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'my_cache_table',
+    }
+}
+```
+
+## Cache Handler
+
+Django uses a `CacheHandler` to manage cache connections:
+
+```python
+from django.core.cache import caches, CacheHandler
+from django.utils.connection import BaseConnectionHandler
+from django.utils.module_loading import import_string
+
+class CacheHandler(BaseConnectionHandler):
+    settings_name = "CACHES"
+    exception_class = InvalidCacheBackendError
+
+    def create_connection(self, alias):
+        params = self.settings[alias].copy()
+        backend = params.pop('BACKEND')
+        location = params.pop('LOCATION', '')
+        try:
+            backend_cls = import_string(backend)
+        except ImportError as e:
+            raise InvalidCacheBackendError(
+                "Could not find backend '%s': %s" % (backend, e)
+            ) from e
+        return backend_cls(location, params)
+
+# Global cache handler
+caches = CacheHandler()
+```
+
+## Best Practices
+
+<Tip>
+1. **Choose the right backend**: Redis for production, LocMem for development
+2. **Set appropriate timeouts**: Balance between freshness and performance
+3. **Use cache versioning**: Invalidate cache easily without deleting keys
+4. **Monitor cache hit rates**: Ensure your caching strategy is effective
+5. **Be mindful of cache size**: Configure `MAX_ENTRIES` and `CULL_FREQUENCY`
+6. **Use cache keys wisely**: Include all variables that affect cached content
+</Tip>
+
+## Common Patterns
+
+### Cache Expensive Queries
+
+```python
+from django.core.cache import cache
+from myapp.models import Article
+
+def get_popular_articles():
+    cache_key = 'popular_articles'
+    articles = cache.get(cache_key)
+    
+    if articles is None:
+        # Cache miss - compute and store
+        articles = list(
+            Article.objects.filter(published=True)
+            .order_by('-views')
+            .select_related('author')
+            [:10]
+        )
+        cache.set(cache_key, articles, timeout=300)
+    
+    return articles
+```
+
+### Cache Model Instances
+
+```python
+def get_article(article_id):
+    cache_key = f'article_{article_id}'
+    article = cache.get(cache_key)
+    
+    if article is None:
+        article = Article.objects.select_related('author').get(pk=article_id)
+        cache.set(cache_key, article, timeout=600)
+    
+    return article
+```
+
+### Invalidate on Save
+
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=Article)
+def invalidate_article_cache(sender, instance, **kwargs):
+    cache_key = f'article_{instance.pk}'
+    cache.delete(cache_key)
+    cache.delete('popular_articles')
+```
+
+<Note>
+Django automatically calls `cache.close()` at the end of each request via the `request_finished` signal.
+</Note>

@@ -1,0 +1,535 @@
+---
+title: Pagination Guide
+description: Learn how to paginate query results in Django
+---
+
+# Pagination Guide
+
+Django's pagination system helps you split large datasets into manageable pages. This guide covers both synchronous and asynchronous pagination.
+
+## Overview
+
+Django provides two main paginator classes:
+- **`Paginator`** - For synchronous views and traditional QuerySets
+- **`AsyncPaginator`** - For async views and async QuerySets
+
+Both classes offer:
+- Automatic page calculation
+- Page validation
+- Orphan handling (small last pages)
+- Elided page ranges (1 2 ... 40 41 42 43 44 ... 50)
+
+## Basic Pagination
+
+<Steps>
+  <Step title="Create a Paginator">
+    Import and instantiate the paginator:
+    
+    ```python views.py
+    from django.core.paginator import Paginator
+    from django.shortcuts import render
+    from .models import Article
+    
+    def article_list(request):
+        # Get all articles
+        article_list = Article.objects.all().order_by('-created_at')
+        
+        # Create paginator with 25 items per page
+        paginator = Paginator(article_list, 25)
+        
+        # Get page number from request
+        page_number = request.GET.get('page', 1)
+        
+        # Get the page object
+        page_obj = paginator.get_page(page_number)
+        
+        return render(request, 'articles/list.html', {'page_obj': page_obj})
+    ```
+  </Step>
+  
+  <Step title="Display in Template">
+    Use the page object in your template:
+    
+    ```django articles/list.html
+    {% for article in page_obj %}
+        <div class="article">
+            <h2>{{ article.title }}</h2>
+            <p>{{ article.excerpt }}</p>
+        </div>
+    {% endfor %}
+    
+    <div class="pagination">
+        <span class="page-info">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+        
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+        {% endif %}
+    </div>
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Always order your QuerySet before paginating to ensure consistent results across pages.
+</Note>
+
+## Paginator Class
+
+### Creating a Paginator
+
+```python
+from django.core.paginator import Paginator
+from .models import Article
+
+# Basic usage
+articles = Article.objects.all()
+paginator = Paginator(articles, 25)  # 25 items per page
+
+# With orphans (small last pages join previous page)
+paginator = Paginator(articles, 25, orphans=3)
+# If last page has ≤3 items, they're added to previous page
+
+# Allow empty first page
+paginator = Paginator(articles, 25, allow_empty_first_page=False)
+# Raises EmptyPage if object_list is empty
+```
+
+### Paginator Properties
+
+```python
+paginator = Paginator(Article.objects.all(), 25)
+
+# Total number of objects
+print(paginator.count)  # 100
+
+# Total number of pages
+print(paginator.num_pages)  # 4
+
+# Page range for iteration
+for page_num in paginator.page_range:
+    print(page_num)  # 1, 2, 3, 4
+
+# Items per page
+print(paginator.per_page)  # 25
+
+# Orphans threshold
+print(paginator.orphans)  # 0
+```
+
+## Page Objects
+
+### Getting Pages
+
+```python
+paginator = Paginator(Article.objects.all(), 25)
+
+# Get specific page (raises PageNotAnInteger or EmptyPage)
+page = paginator.page(1)
+
+# Get page with automatic validation
+page = paginator.get_page(1)  # Returns first page if invalid
+page = paginator.get_page('invalid')  # Returns first page
+page = paginator.get_page(999)  # Returns last page
+```
+
+### Page Properties
+
+```python
+page = paginator.page(2)
+
+# Current page number
+print(page.number)  # 2
+
+# Objects on this page
+for article in page.object_list:
+    print(article.title)
+
+# Access items by index
+first_item = page[0]
+
+# Page navigation
+print(page.has_previous())  # True
+print(page.has_next())  # True
+print(page.has_other_pages())  # True
+
+# Previous/next page numbers
+print(page.previous_page_number())  # 1
+print(page.next_page_number())  # 3
+
+# Item indices (1-based)
+print(page.start_index())  # 26
+print(page.end_index())  # 50
+```
+
+## Advanced Pagination
+
+### Elided Page Range
+
+For large page counts, use elided ranges:
+
+```python
+paginator = Paginator(range(1000), 10)  # 100 pages
+
+# Get elided page range for page 50
+elided = paginator.get_elided_page_range(
+    number=50,
+    on_each_side=3,  # Show 3 pages on each side of current
+    on_ends=2        # Show 2 pages on each end
+)
+
+for page_num in elided:
+    print(page_num)
+# Output: 1, 2, '…', 47, 48, 49, 50, 51, 52, 53, '…', 99, 100
+```
+
+```django template.html
+<div class="pagination">
+    {% for page_num in page_obj.paginator.get_elided_page_range %}
+        {% if page_num == page_obj.paginator.ELLIPSIS %}
+            <span class="ellipsis">…</span>
+        {% else %}
+            <a href="?page={{ page_num }}"
+               {% if page_num == page_obj.number %}class="active"{% endif %}>
+                {{ page_num }}
+            </a>
+        {% endif %}
+    {% endfor %}
+</div>
+```
+
+### Pagination with Filters
+
+Preserve query parameters when paginating:
+
+```python views.py
+def article_list(request):
+    articles = Article.objects.all()
+    
+    # Apply filters
+    category = request.GET.get('category')
+    if category:
+        articles = articles.filter(category=category)
+    
+    search = request.GET.get('search')
+    if search:
+        articles = articles.filter(title__icontains=search)
+    
+    # Paginate filtered results
+    paginator = Paginator(articles, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    
+    return render(request, 'articles/list.html', {
+        'page_obj': page_obj,
+        'category': category,
+        'search': search,
+    })
+```
+
+```django template.html
+<a href="?page={{ page_obj.next_page_number }}&category={{ category }}&search={{ search }}">
+    Next
+</a>
+```
+
+Or use a custom template tag:
+
+```python templatetags/pagination_tags.py
+from django import template
+from urllib.parse import urlencode
+
+register = template.Library()
+
+@register.simple_tag
+def url_replace(request, **kwargs):
+    query = request.GET.copy()
+    for key, value in kwargs.items():
+        query[key] = value
+    return query.urlencode()
+```
+
+```django template.html
+{% load pagination_tags %}
+
+<a href="?{% url_replace request page=page_obj.next_page_number %}">
+    Next
+</a>
+```
+
+## Async Pagination
+
+For async views with async QuerySets:
+
+```python views.py
+from django.core.paginator import AsyncPaginator
+from django.shortcuts import render
+from .models import Article
+
+async def article_list_async(request):
+    # Create async paginator
+    articles = Article.objects.all().order_by('-created_at')
+    paginator = AsyncPaginator(articles, 25)
+    
+    page_number = request.GET.get('page', 1)
+    page_obj = await paginator.aget_page(page_number)
+    
+    # Load objects from page
+    await page_obj.aget_object_list()
+    
+    return render(request, 'articles/list.html', {'page_obj': page_obj})
+```
+
+### Async Page Methods
+
+```python
+paginator = AsyncPaginator(Article.objects.all(), 25)
+
+# Get page asynchronously
+page = await paginator.apage(1)
+
+# Get page with validation
+page = await paginator.aget_page(1)
+
+# Load objects
+objects = await page.aget_object_list()
+
+# Navigation checks
+has_next = await page.ahas_next()
+has_prev = await page.ahas_previous()
+has_other = await page.ahas_other_pages()
+
+# Page numbers
+next_num = await page.anext_page_number()
+prev_num = await page.aprevious_page_number()
+
+# Indices
+start = await page.astart_index()
+end = await page.aend_index()
+```
+
+## Exception Handling
+
+```python
+from django.core.paginator import (
+    Paginator,
+    EmptyPage,
+    PageNotAnInteger
+)
+
+paginator = Paginator(Article.objects.all(), 25)
+page_number = request.GET.get('page')
+
+try:
+    page = paginator.page(page_number)
+except PageNotAnInteger:
+    # Page is not an integer, deliver first page
+    page = paginator.page(1)
+except EmptyPage:
+    # Page is out of range, deliver last page
+    page = paginator.page(paginator.num_pages)
+```
+
+<Note>
+  Use `paginator.get_page()` to automatically handle these exceptions.
+</Note>
+
+## Class-Based Views
+
+### ListView with Pagination
+
+```python views.py
+from django.views.generic import ListView
+from .models import Article
+
+class ArticleListView(ListView):
+    model = Article
+    paginate_by = 25
+    context_object_name = 'articles'
+    template_name = 'articles/list.html'
+    
+    def get_queryset(self):
+        return Article.objects.filter(
+            published=True
+        ).order_by('-created_at')
+```
+
+```django template.html
+{% for article in articles %}
+    <div>{{ article.title }}</div>
+{% endfor %}
+
+{% if is_paginated %}
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+        
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+        {% endif %}
+    </div>
+{% endif %}
+```
+
+### Custom Pagination in CBV
+
+```python views.py
+class CustomArticleListView(ListView):
+    model = Article
+    paginate_by = 25
+    paginate_orphans = 3
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Add elided page range
+        if context['is_paginated']:
+            paginator = context['paginator']
+            page = context['page_obj']
+            context['elided_page_range'] = paginator.get_elided_page_range(
+                number=page.number,
+                on_each_side=2,
+                on_ends=1
+            )
+        
+        return context
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Always Order QuerySets">
+    Unordered QuerySets may yield inconsistent results:
+    
+    ```python
+    # Bad - unordered
+    paginator = Paginator(Article.objects.all(), 25)
+    
+    # Good - ordered
+    paginator = Paginator(
+        Article.objects.all().order_by('-created_at'),
+        25
+    )
+    ```
+  </Step>
+  
+  <Step title="Use get_page() for Safety">
+    Automatically handles invalid page numbers:
+    
+    ```python
+    # Raises exceptions
+    page = paginator.page(page_number)
+    
+    # Handles errors gracefully
+    page = paginator.get_page(page_number)
+    ```
+  </Step>
+  
+  <Step title="Optimize Database Queries">
+    Use `select_related()` and `prefetch_related()`:
+    
+    ```python
+    articles = Article.objects.select_related(
+        'author'
+    ).prefetch_related(
+        'tags'
+    ).order_by('-created_at')
+    
+    paginator = Paginator(articles, 25)
+    ```
+  </Step>
+  
+  <Step title="Cache Expensive Queries">
+    For rarely-changing data:
+    
+    ```python
+    from django.core.cache import cache
+    
+    cache_key = f'articles_page_{page_number}'
+    page_obj = cache.get(cache_key)
+    
+    if page_obj is None:
+        paginator = Paginator(articles, 25)
+        page_obj = paginator.get_page(page_number)
+        cache.set(cache_key, page_obj, 300)  # 5 minutes
+    ```
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Pagination with AJAX
+
+```javascript
+function loadPage(pageNum) {
+    fetch(`/api/articles/?page=${pageNum}`)
+        .then(response => response.json())
+        .then(data => {
+            // Update content
+            document.getElementById('articles').innerHTML = data.html;
+            
+            // Update pagination
+            updatePaginationControls(data.page_info);
+        });
+}
+```
+
+```python views.py
+from django.http import JsonResponse
+from django.template.loader import render_to_string
+
+def article_list_api(request):
+    articles = Article.objects.all().order_by('-created_at')
+    paginator = Paginator(articles, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    
+    html = render_to_string('articles/_list.html', {'page_obj': page_obj})
+    
+    return JsonResponse({
+        'html': html,
+        'page_info': {
+            'number': page_obj.number,
+            'num_pages': paginator.num_pages,
+            'has_previous': page_obj.has_previous(),
+            'has_next': page_obj.has_next(),
+        }
+    })
+```
+
+### Infinite Scroll
+
+```javascript
+let page = 1;
+let loading = false;
+
+window.addEventListener('scroll', () => {
+    if (loading) return;
+    
+    if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+        loading = true;
+        page++;
+        
+        fetch(`/api/articles/?page=${page}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('articles').insertAdjacentHTML('beforeend', data.html);
+                loading = false;
+            });
+    }
+});
+```
+
+## Related Resources
+
+- [Paginator API Reference](/api-reference/paginator)
+- [ListView Documentation](/api-reference/views/list)
+- [QuerySet Optimization](/guides/database-optimization)

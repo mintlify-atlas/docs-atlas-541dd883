@@ -1,0 +1,676 @@
+---
+title: 'Multiple Databases'
+description: 'Learn how to work with multiple databases in Django using database routing and the using() method'
+---
+
+## Introduction
+
+Django supports working with multiple databases simultaneously. This is useful for:
+- Separating read and write operations (primary/replica setup)
+- Partitioning data across databases
+- Integrating with legacy databases
+- Microservices data isolation
+
+## Configuring Multiple Databases
+
+Define multiple databases in your `settings.py`:
+
+```python
+# settings.py
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'primary_db',
+        'USER': 'postgres',
+        'PASSWORD': 'password',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    },
+    'replica': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'replica_db',
+        'USER': 'postgres',
+        'PASSWORD': 'password',
+        'HOST': 'replica.example.com',
+        'PORT': '5432',
+    },
+    'analytics': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'analytics_db',
+        'USER': 'analytics_user',
+        'PASSWORD': 'password',
+        'HOST': 'analytics.example.com',
+        'PORT': '5432',
+    },
+    'legacy': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'legacy_system',
+        'USER': 'root',
+        'PASSWORD': 'password',
+        'HOST': 'legacy.example.com',
+        'PORT': '3306',
+    },
+}
+```
+
+<Note>
+The `'default'` database is required. Django uses it when no database is specified.
+</Note>
+
+## Using the using() Method
+
+The `using()` method explicitly specifies which database to use for a query.
+
+### Basic Usage
+
+```python
+from myapp.models import Article, User
+
+# Read from default database
+articles = Article.objects.all()
+
+# Read from replica database
+articles = Article.objects.using('replica').all()
+
+# Get specific object from analytics database
+user = User.objects.using('analytics').get(id=1)
+
+# Filter on specific database
+published = Article.objects.using('replica').filter(is_published=True)
+```
+
+### Creating Objects
+
+```python
+# Create on default database
+article = Article.objects.create(title='Test')
+
+# Create on specific database
+article = Article.objects.using('analytics').create(title='Test')
+
+# Or use save() with using parameter
+article = Article(title='Test')
+article.save(using='analytics')
+```
+
+### Updating Objects
+
+```python
+# Update on default database
+Article.objects.filter(is_published=False).update(status='draft')
+
+# Update on specific database
+Article.objects.using('analytics').filter(is_published=False).update(status='draft')
+
+# Save instance to specific database
+article = Article.objects.using('replica').get(id=1)
+article.title = 'Updated'
+article.save(using='default')  # Save to different database
+```
+
+### Deleting Objects
+
+```python
+# Delete from default database
+Article.objects.filter(id=1).delete()
+
+# Delete from specific database
+Article.objects.using('analytics').filter(id=1).delete()
+
+# Delete instance from specific database
+article = Article.objects.using('analytics').get(id=1)
+article.delete(using='analytics')
+```
+
+## Database Routers
+
+Database routers control which database to use for different operations. They provide fine-grained control over database selection.
+
+### Creating a Database Router
+
+Create a router class with these methods:
+
+```python
+# routers.py
+class PrimaryReplicaRouter:
+    """
+    A router to control database operations for primary-replica setup.
+    """
+    
+    def db_for_read(self, model, **hints):
+        """
+        Reads go to replica database.
+        """
+        return 'replica'
+    
+    def db_for_write(self, model, **hints):
+        """
+        Writes go to primary database.
+        """
+        return 'default'
+    
+    def allow_relation(self, obj1, obj2, **hints):
+        """
+        Allow relations if both objects are in the same database pool.
+        """
+        db_set = {'default', 'replica'}
+        if obj1._state.db in db_set and obj2._state.db in db_set:
+            return True
+        return None
+    
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        """
+        All models can be migrated on default and replica databases.
+        """
+        return db in {'default', 'replica'}
+```
+
+### Router Methods
+
+From Django's routing system in `/django/db/utils.py`:
+
+#### db_for_read(model, **hints)
+
+Determines which database to use for read operations:
+
+```python
+def db_for_read(self, model, **hints):
+    # Route User reads to replica
+    if model._meta.app_label == 'auth':
+        return 'replica'
+    return 'default'
+```
+
+#### db_for_write(model, **hints)
+
+Determines which database to use for write operations:
+
+```python
+def db_for_write(self, model, **hints):
+    # All writes go to primary
+    return 'default'
+```
+
+#### allow_relation(obj1, obj2, **hints)
+
+Determines if a relation between two objects is allowed:
+
+```python
+def allow_relation(self, obj1, obj2, **hints):
+    # Allow relations within same database
+    if obj1._state.db == obj2._state.db:
+        return True
+    # Deny cross-database relations
+    return False
+```
+
+#### allow_migrate(db, app_label, model_name=None, **hints)
+
+Determines if migrations should run on a database:
+
+```python
+def allow_migrate(self, db, app_label, model_name=None, **hints):
+    # Only migrate analytics app on analytics database
+    if app_label == 'analytics':
+        return db == 'analytics'
+    # Migrate other apps on default database
+    return db == 'default'
+```
+
+### Registering Routers
+
+Add routers to `settings.py`:
+
+```python
+# settings.py
+DATABASE_ROUTERS = [
+    'myproject.routers.PrimaryReplicaRouter',
+    'myproject.routers.AnalyticsRouter',
+]
+```
+
+<Note>
+Routers are processed in order. The first router to return a value for a method "wins". If all routers return `None`, Django uses the default database.
+</Note>
+
+## Common Router Patterns
+
+### Primary-Replica Router
+
+```python
+class PrimaryReplicaRouter:
+    """
+    Route reads to replica, writes to primary.
+    """
+    
+    def db_for_read(self, model, **hints):
+        return 'replica'
+    
+    def db_for_write(self, model, **hints):
+        return 'default'
+    
+    def allow_relation(self, obj1, obj2, **hints):
+        db_set = {'default', 'replica'}
+        return (
+            obj1._state.db in db_set and
+            obj2._state.db in db_set
+        )
+    
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        # Only migrate on primary
+        return db == 'default'
+```
+
+### App-Specific Router
+
+```python
+class AnalyticsRouter:
+    """
+    Route analytics app to separate database.
+    """
+    
+    def db_for_read(self, model, **hints):
+        if model._meta.app_label == 'analytics':
+            return 'analytics'
+        return None
+    
+    def db_for_write(self, model, **hints):
+        if model._meta.app_label == 'analytics':
+            return 'analytics'
+        return None
+    
+    def allow_relation(self, obj1, obj2, **hints):
+        # Allow relations only within analytics app
+        if (
+            obj1._meta.app_label == 'analytics' or
+            obj2._meta.app_label == 'analytics'
+        ):
+            return obj1._meta.app_label == obj2._meta.app_label
+        return None
+    
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        if app_label == 'analytics':
+            return db == 'analytics'
+        return None
+```
+
+### Model-Specific Router
+
+```python
+class UserRouter:
+    """
+    Route User model to separate database.
+    """
+    
+    def db_for_read(self, model, **hints):
+        if model._meta.model_name == 'user':
+            return 'users_db'
+        return None
+    
+    def db_for_write(self, model, **hints):
+        if model._meta.model_name == 'user':
+            return 'users_db'
+        return None
+    
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        if model_name == 'user':
+            return db == 'users_db'
+        return None
+```
+
+### Random Replica Router
+
+```python
+import random
+
+class RandomReplicaRouter:
+    """
+    Distribute reads across multiple replicas.
+    """
+    
+    REPLICAS = ['replica1', 'replica2', 'replica3']
+    
+    def db_for_read(self, model, **hints):
+        return random.choice(self.REPLICAS)
+    
+    def db_for_write(self, model, **hints):
+        return 'default'
+    
+    def allow_relation(self, obj1, obj2, **hints):
+        db_set = {'default', *self.REPLICAS}
+        return (
+            obj1._state.db in db_set and
+            obj2._state.db in db_set
+        )
+    
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        return db == 'default'
+```
+
+## Manually Selecting Databases
+
+### Override Router Decisions
+
+```python
+# Router says use replica, but we explicitly use default
+articles = Article.objects.using('default').all()
+
+# Force write to replica (not recommended!)
+article = Article(title='Test')
+article.save(using='replica')
+```
+
+### Transactions on Specific Databases
+
+```python
+from django.db import transaction
+
+# Transaction on default database
+with transaction.atomic():
+    Article.objects.create(title='Test')
+
+# Transaction on specific database
+with transaction.atomic(using='analytics'):
+    Article.objects.using('analytics').create(title='Test')
+
+# Multiple database transactions (not atomic across both!)
+with transaction.atomic(using='default'):
+    Article.objects.using('default').create(title='Test')
+    
+    with transaction.atomic(using='analytics'):
+        Analytics.objects.using('analytics').create(data='test')
+```
+
+## Cross-Database Relations
+
+<Warning>
+Django does not support cross-database foreign keys. Relations must be within the same database.
+</Warning>
+
+### Manual Cross-Database Relations
+
+```python
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    # Store user ID instead of ForeignKey
+    user_id = models.IntegerField()
+    
+    @property
+    def user(self):
+        # Manually fetch from different database
+        return User.objects.using('users_db').get(id=self.user_id)
+    
+    @user.setter
+    def user(self, user):
+        self.user_id = user.id
+```
+
+## Migrations with Multiple Databases
+
+### Running Migrations
+
+```bash
+# Migrate all databases
+python manage.py migrate
+
+# Migrate specific database
+python manage.py migrate --database=replica
+python manage.py migrate --database=analytics
+
+# Check migration status for specific database
+python manage.py showmigrations --database=analytics
+```
+
+### Migration Router Control
+
+```python
+class AnalyticsRouter:
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        # Analytics app only on analytics database
+        if app_label == 'analytics':
+            return db == 'analytics'
+        
+        # Other apps not on analytics database
+        if db == 'analytics':
+            return False
+        
+        # Default behavior for other databases
+        return None
+```
+
+## Synchronizing Data Between Databases
+
+### Copy Data Between Databases
+
+```python
+def sync_users_to_analytics():
+    """Copy user data to analytics database."""
+    users = User.objects.using('default').all()
+    
+    for user in users:
+        AnalyticsUser.objects.using('analytics').update_or_create(
+            user_id=user.id,
+            defaults={
+                'username': user.username,
+                'email': user.email,
+                'joined_date': user.date_joined,
+            }
+        )
+```
+
+### Bulk Sync with Raw SQL
+
+```python
+from django.db import connections
+
+def bulk_sync():
+    with connections['default'].cursor() as cursor:
+        cursor.execute("SELECT * FROM users")
+        rows = cursor.fetchall()
+    
+    with connections['analytics'].cursor() as cursor:
+        cursor.executemany(
+            "INSERT INTO analytics_users VALUES (%s, %s, %s)",
+            rows
+        )
+```
+
+## Database Utilities
+
+From Django's source at `/django/db/__init__.py`:
+
+```python
+from django.db import connections, router
+
+# Access specific connection
+connection = connections['analytics']
+
+# Get all connections
+all_conns = connections.all()
+
+# Check which database to use for a model
+db = router.db_for_read(Article)
+db = router.db_for_write(Article)
+
+# Check if relation is allowed
+allowed = router.allow_relation(article, author)
+
+# Check if migration is allowed
+allowed = router.allow_migrate('default', 'myapp', 'Article')
+```
+
+## Testing with Multiple Databases
+
+```python
+from django.test import TestCase
+
+class MultiDatabaseTest(TestCase):
+    databases = {'default', 'replica', 'analytics'}
+    
+    def test_read_from_replica(self):
+        # Create on default
+        article = Article.objects.create(title='Test')
+        
+        # Read from replica
+        article_from_replica = Article.objects.using('replica').get(id=article.id)
+        
+        self.assertEqual(article.title, article_from_replica.title)
+    
+    def test_analytics_database(self):
+        # Create analytics record
+        Analytics.objects.using('analytics').create(event='page_view')
+        
+        # Verify it's in analytics database
+        count = Analytics.objects.using('analytics').count()
+        self.assertEqual(count, 1)
+```
+
+<Note>
+Specify which databases to use in tests with the `databases` attribute. By default, tests only use the `'default'` database.
+</Note>
+
+## Best Practices
+
+### 1. Use Routers for Automatic Routing
+
+```python
+# Good: Router handles database selection
+articles = Article.objects.all()  # Router directs to replica
+
+# Less maintainable: Explicit database everywhere
+articles = Article.objects.using('replica').all()
+```
+
+### 2. Read from Replicas, Write to Primary
+
+```python
+class PrimaryReplicaRouter:
+    def db_for_read(self, model, **hints):
+        return 'replica'
+    
+    def db_for_write(self, model, **hints):
+        return 'default'
+```
+
+### 3. Handle Replication Lag
+
+```python
+def create_article(data):
+    # Write to primary
+    article = Article.objects.create(**data)
+    
+    # Read from primary immediately after write
+    # to avoid replication lag
+    article = Article.objects.using('default').get(id=article.id)
+    
+    return article
+```
+
+### 4. Isolate Read-Heavy Operations
+
+```python
+# Analytics queries on separate database
+def generate_report():
+    # Heavy aggregation on analytics database
+    stats = Article.objects.using('analytics').aggregate(
+        total=Count('id'),
+        avg_views=Avg('view_count')
+    )
+    return stats
+```
+
+### 5. Keep Related Data Together
+
+```python
+class ContentRouter:
+    def db_for_read(self, model, **hints):
+        # Keep all content-related models together
+        if model._meta.app_label == 'content':
+            return 'content_db'
+        return None
+```
+
+### 6. Document Database Assignments
+
+```python
+# models.py
+class Article(models.Model):
+    """
+    Article model.
+    
+    Database: Routed to 'default' for writes, 'replica' for reads.
+    """
+    title = models.CharField(max_length=200)
+
+class Analytics(models.Model):
+    """
+    Analytics model.
+    
+    Database: Always uses 'analytics' database.
+    """
+    event = models.CharField(max_length=100)
+```
+
+<Tip>
+Use database replicas for scaling read operations. Keep write operations on a primary database and propagate changes to replicas asynchronously.
+</Tip>
+
+## Common Pitfalls
+
+### 1. Cross-Database Foreign Keys
+
+```python
+# BAD: Foreign key across databases (not supported)
+class Article(models.Model):  # On default database
+    author = models.ForeignKey(
+        'analytics.AnalyticsUser',  # On analytics database
+        on_delete=models.CASCADE
+    )
+
+# GOOD: Use integer ID and manual lookup
+class Article(models.Model):
+    author_id = models.IntegerField()
+    
+    def get_author(self):
+        from analytics.models import AnalyticsUser
+        return AnalyticsUser.objects.using('analytics').get(id=self.author_id)
+```
+
+### 2. Transaction Scope
+
+```python
+# BAD: Assumes single transaction across databases
+with transaction.atomic():
+    Article.objects.using('default').create(title='Test')
+    Analytics.objects.using('analytics').create(event='created')
+    # If analytics fails, article is still created!
+
+# GOOD: Separate transactions with proper error handling
+try:
+    with transaction.atomic(using='default'):
+        article = Article.objects.using('default').create(title='Test')
+    
+    try:
+        with transaction.atomic(using='analytics'):
+            Analytics.objects.using('analytics').create(event='created')
+    except Exception:
+        # Handle analytics failure separately
+        logger.error("Analytics creation failed")
+except Exception:
+    # Handle article creation failure
+    raise
+```
+
+### 3. Forgotten using() Calls
+
+```python
+# BAD: Mixes implicit and explicit database selection
+article = Article.objects.using('replica').get(id=1)
+article.title = 'Updated'
+article.save()  # Saves to default, not replica!
+
+# GOOD: Explicit database for both operations
+article = Article.objects.using('default').get(id=1)
+article.title = 'Updated'
+article.save(using='default')
+```

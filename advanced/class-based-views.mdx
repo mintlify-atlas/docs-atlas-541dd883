@@ -1,0 +1,529 @@
+---
+title: "Class-Based Views"
+description: "Master Django's class-based views including DetailView, ListView, FormView, and powerful mixins"
+---
+
+## Introduction
+
+Class-based views (CBVs) provide an object-oriented way to organize view code. They promote code reuse through inheritance and mixins, making complex views easier to maintain.
+
+## Base View Classes
+
+### View Class
+
+The foundation of all class-based views:
+
+```python
+from django.views.generic import View
+from django.http import HttpResponse
+
+class MyView(View):
+    def get(self, request, *args, **kwargs):
+        return HttpResponse("GET request")
+    
+    def post(self, request, *args, **kwargs):
+        return HttpResponse("POST request")
+    
+    def put(self, request, *args, **kwargs):
+        return HttpResponse("PUT request")
+```
+
+### View Implementation
+
+From Django source (`django/views/generic/base.py`):
+
+```python
+class View:
+    """
+    Intentionally simple parent class for all views.
+    Only implements dispatch-by-method and simple sanity checking.
+    """
+    
+    http_method_names = [
+        'get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'
+    ]
+    
+    @classonlymethod
+    def as_view(cls, **initkwargs):
+        """Main entry point for a request-response process."""
+        def view(request, *args, **kwargs):
+            self = cls(**initkwargs)
+            self.setup(request, *args, **kwargs)
+            if not hasattr(self, 'request'):
+                raise AttributeError(
+                    "%s instance has no 'request' attribute. Did you override "
+                    "setup() and forget to call super()?" % cls.__name__
+                )
+            return self.dispatch(request, *args, **kwargs)
+        
+        view.view_class = cls
+        view.view_initkwargs = initkwargs
+        return view
+    
+    def setup(self, request, *args, **kwargs):
+        """Initialize attributes shared by all view methods."""
+        if hasattr(self, 'get') and not hasattr(self, 'head'):
+            self.head = self.get
+        self.request = request
+        self.args = args
+        self.kwargs = kwargs
+    
+    def dispatch(self, request, *args, **kwargs):
+        """Dispatch to the right method based on HTTP verb."""
+        method = request.method.lower()
+        if method in self.http_method_names:
+            handler = getattr(self, method, self.http_method_not_allowed)
+        else:
+            handler = self.http_method_not_allowed
+        return handler(request, *args, **kwargs)
+```
+
+### Using Views in URLs
+
+```python
+# urls.py
+from django.urls import path
+from myapp.views import MyView
+
+urlpatterns = [
+    path('my-view/', MyView.as_view(), name='my-view'),
+    
+    # With initialization arguments
+    path('custom/', MyView.as_view(template_name='custom.html')),
+]
+```
+
+## DetailView
+
+Display a single object from the database.
+
+### Basic DetailView
+
+```python
+from django.views.generic import DetailView
+from myapp.models import Article
+
+class ArticleDetailView(DetailView):
+    model = Article
+    template_name = 'article_detail.html'
+    context_object_name = 'article'
+    
+    # Optional: customize queryset
+    def get_queryset(self):
+        return Article.objects.select_related('author').filter(published=True)
+    
+    # Optional: add extra context
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['related_articles'] = Article.objects.filter(
+            category=self.object.category
+        ).exclude(pk=self.object.pk)[:5]
+        return context
+```
+
+### DetailView Implementation
+
+From Django source (`django/views/generic/detail.py`):
+
+```python
+class SingleObjectMixin(ContextMixin):
+    """
+    Provide the ability to retrieve a single object for further manipulation.
+    """
+    model = None
+    queryset = None
+    slug_field = 'slug'
+    context_object_name = None
+    slug_url_kwarg = 'slug'
+    pk_url_kwarg = 'pk'
+    query_pk_and_slug = False
+    
+    def get_object(self, queryset=None):
+        """
+        Return the object the view is displaying.
+        Require `self.queryset` and a `pk` or `slug` argument in the URLconf.
+        """
+        if queryset is None:
+            queryset = self.get_queryset()
+        
+        # Next, try looking up by primary key
+        pk = self.kwargs.get(self.pk_url_kwarg)
+        slug = self.kwargs.get(self.slug_url_kwarg)
+        if pk is not None:
+            queryset = queryset.filter(pk=pk)
+        
+        # Next, try looking up by slug
+        if slug is not None and (pk is None or self.query_pk_and_slug):
+            slug_field = self.get_slug_field()
+            queryset = queryset.filter(**{slug_field: slug})
+        
+        if pk is None and slug is None:
+            raise AttributeError(
+                "Generic detail view %s must be called with either an object "
+                "pk or a slug in the URLconf." % self.__class__.__name__
+            )
+        
+        try:
+            obj = queryset.get()
+        except queryset.model.DoesNotExist:
+            raise Http404(
+                _("No %(verbose_name)s found matching the query")
+                % {'verbose_name': queryset.model._meta.verbose_name}
+            )
+        return obj
+
+class DetailView(SingleObjectTemplateResponseMixin, BaseDetailView):
+    """
+    Render a "detail" view of an object.
+    By default this is a model instance looked up from `self.queryset`.
+    """
+    pass
+```
+
+### URL Configuration
+
+```python
+from django.urls import path
+
+urlpatterns = [
+    # Using primary key
+    path('article/<int:pk>/', ArticleDetailView.as_view(), name='article-detail'),
+    
+    # Using slug
+    path('article/<slug:slug>/', ArticleDetailView.as_view(), name='article-detail'),
+]
+```
+
+## ListView
+
+Display a list of objects with optional pagination.
+
+### Basic ListView
+
+```python
+from django.views.generic import ListView
+from myapp.models import Article
+
+class ArticleListView(ListView):
+    model = Article
+    template_name = 'article_list.html'
+    context_object_name = 'articles'
+    paginate_by = 20
+    ordering = ['-published_date']
+    
+    # Optional: filter queryset
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return queryset.filter(published=True).select_related('author')
+    
+    # Optional: customize pagination
+    def get_paginate_by(self, queryset):
+        # Allow dynamic pagination
+        return self.request.GET.get('per_page', self.paginate_by)
+```
+
+### ListView Implementation
+
+From Django source (`django/views/generic/list.py`):
+
+```python
+class MultipleObjectMixin(ContextMixin):
+    """A mixin for views manipulating multiple objects."""
+    
+    allow_empty = True
+    queryset = None
+    model = None
+    paginate_by = None
+    paginate_orphans = 0
+    context_object_name = None
+    paginator_class = Paginator
+    page_kwarg = 'page'
+    ordering = None
+    
+    def get_queryset(self):
+        """
+        Return the list of items for this view.
+        The return value must be an iterable and may be an instance of QuerySet.
+        """
+        if self.queryset is not None:
+            queryset = self.queryset
+            if isinstance(queryset, QuerySet):
+                queryset = queryset.all()
+        elif self.model is not None:
+            queryset = self.model._default_manager.all()
+        else:
+            raise ImproperlyConfigured(
+                "%(cls)s is missing a QuerySet. Define "
+                "%(cls)s.model, %(cls)s.queryset, or override "
+                "%(cls)s.get_queryset()." % {'cls': self.__class__.__name__}
+            )
+        ordering = self.get_ordering()
+        if ordering:
+            if isinstance(ordering, str):
+                ordering = (ordering,)
+            queryset = queryset.order_by(*ordering)
+        return queryset
+
+class ListView(MultipleObjectTemplateResponseMixin, BaseListView):
+    """
+    Render some list of objects.
+    `self.queryset` can actually be any iterable of items, not just a queryset.
+    """
+    pass
+```
+
+### Pagination in Templates
+
+```django
+<!-- article_list.html -->
+{% for article in articles %}
+    <h2>{{ article.title }}</h2>
+    <p>{{ article.excerpt }}</p>
+{% endfor %}
+
+{% if is_paginated %}
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">First</a>
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+        
+        <span>Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+        
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+            <a href="?page={{ paginator.num_pages }}">Last</a>
+        {% endif %}
+    </div>
+{% endif %}
+```
+
+<Tip>
+ListView provides `paginator`, `page_obj`, and `is_paginated` in the context when `paginate_by` is set.
+</Tip>
+
+## FormView
+
+Display a form and handle form submission.
+
+### Basic FormView
+
+```python
+from django.views.generic import FormView
+from django.urls import reverse_lazy
+from myapp.forms import ContactForm
+
+class ContactFormView(FormView):
+    template_name = 'contact.html'
+    form_class = ContactForm
+    success_url = reverse_lazy('contact-success')
+    
+    def form_valid(self, form):
+        # Process the form data
+        form.send_email()
+        return super().form_valid(form)
+    
+    def form_invalid(self, form):
+        # Handle invalid form
+        return super().form_invalid(form)
+    
+    def get_form_kwargs(self):
+        # Add extra kwargs to form initialization
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+```
+
+### FormView Implementation
+
+From Django source (`django/views/generic/edit.py`):
+
+```python
+class FormMixin(ContextMixin):
+    """Provide a way to show and handle a form in a request."""
+    
+    initial = {}
+    form_class = None
+    success_url = None
+    prefix = None
+    
+    def get_form_kwargs(self):
+        """Return the keyword arguments for instantiating the form."""
+        kwargs = {
+            'initial': self.get_initial(),
+            'prefix': self.get_prefix(),
+        }
+        if self.request.method in ('POST', 'PUT'):
+            kwargs.update({
+                'data': self.request.POST,
+                'files': self.request.FILES,
+            })
+        return kwargs
+    
+    def form_valid(self, form):
+        """If the form is valid, redirect to the supplied URL."""
+        return HttpResponseRedirect(self.get_success_url())
+    
+    def form_invalid(self, form):
+        """If the form is invalid, render the invalid form."""
+        return self.render_to_response(self.get_context_data(form=form))
+
+class FormView(TemplateResponseMixin, BaseFormView):
+    """A view for displaying a form and rendering a template response."""
+    pass
+```
+
+## CreateView, UpdateView, DeleteView
+
+### CreateView
+
+```python
+from django.views.generic.edit import CreateView
+from django.urls import reverse_lazy
+from myapp.models import Article
+
+class ArticleCreateView(CreateView):
+    model = Article
+    fields = ['title', 'content', 'category']
+    template_name = 'article_form.html'
+    success_url = reverse_lazy('article-list')
+    
+    def form_valid(self, form):
+        # Set the author before saving
+        form.instance.author = self.request.user
+        return super().form_valid(form)
+```
+
+### UpdateView
+
+```python
+from django.views.generic.edit import UpdateView
+
+class ArticleUpdateView(UpdateView):
+    model = Article
+    fields = ['title', 'content', 'category']
+    template_name = 'article_form.html'
+    
+    def get_success_url(self):
+        return reverse_lazy('article-detail', kwargs={'pk': self.object.pk})
+```
+
+### DeleteView
+
+```python
+from django.views.generic.edit import DeleteView
+
+class ArticleDeleteView(DeleteView):
+    model = Article
+    template_name = 'article_confirm_delete.html'
+    success_url = reverse_lazy('article-list')
+    
+    def delete(self, request, *args, **kwargs):
+        # Custom delete logic
+        self.object = self.get_object()
+        success_url = self.get_success_url()
+        
+        # Log deletion
+        logger.info(f"Article {self.object.pk} deleted by {request.user}")
+        
+        self.object.delete()
+        return HttpResponseRedirect(success_url)
+```
+
+## Mixins
+
+Mixins provide reusable functionality for class-based views.
+
+### LoginRequiredMixin
+
+```python
+from django.contrib.auth.mixins import LoginRequiredMixin
+
+class ProtectedView(LoginRequiredMixin, DetailView):
+    model = Article
+    login_url = '/login/'
+    redirect_field_name = 'next'
+```
+
+### PermissionRequiredMixin
+
+```python
+from django.contrib.auth.mixins import PermissionRequiredMixin
+
+class ArticleUpdateView(PermissionRequiredMixin, UpdateView):
+    model = Article
+    fields = ['title', 'content']
+    permission_required = 'myapp.change_article'
+    
+    def has_permission(self):
+        # Custom permission logic
+        obj = self.get_object()
+        return obj.author == self.request.user
+```
+
+### Custom Mixins
+
+```python
+class UserQuerySetMixin:
+    """Filter queryset by current user."""
+    
+    def get_queryset(self):
+        return super().get_queryset().filter(author=self.request.user)
+
+class TimestampMixin:
+    """Add timestamp to form save."""
+    
+    def form_valid(self, form):
+        form.instance.updated_by = self.request.user
+        form.instance.updated_at = timezone.now()
+        return super().form_valid(form)
+
+class MyArticleUpdateView(LoginRequiredMixin, TimestampMixin, UpdateView):
+    model = Article
+    fields = ['title', 'content']
+```
+
+<Note>
+Mixin order matters! Mixins should be listed left-to-right before the base view class. Method Resolution Order (MRO) determines which method is called.
+</Note>
+
+## ContextMixin
+
+```python
+class ContextMixin:
+    """
+    A default context mixin that passes the keyword arguments received by
+    get_context_data() as the template context.
+    """
+    extra_context = None
+    
+    def get_context_data(self, **kwargs):
+        kwargs.setdefault('view', self)
+        if self.extra_context is not None:
+            kwargs.update(self.extra_context)
+        return kwargs
+
+# Usage
+class MyView(ContextMixin, TemplateView):
+    extra_context = {'site_name': 'My Site'}
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['current_time'] = timezone.now()
+        return context
+```
+
+## Best Practices
+
+<Tip>
+1. **Use mixins for reusable functionality**: Create custom mixins for common patterns
+2. **Override get_queryset()**: For filtering and optimization (select_related, prefetch_related)
+3. **Be mindful of MRO**: Place mixins before the base view class
+4. **Use get_context_data()**: To add extra context variables
+5. **Leverage form_valid()**: For custom form processing logic
+6. **Set context_object_name**: For more readable template variables
+</Tip>
+
+<Warning>
+Don't override `dispatch()` unless absolutely necessary. Use mixins or override specific HTTP method handlers instead.
+</Warning>

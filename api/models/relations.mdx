@@ -1,0 +1,388 @@
+---
+title: Relationship Fields
+description: Complete API reference for Django relationship field types
+---
+
+# Relationship Fields
+
+Django provides relationship fields that define relationships between models.
+
+## ForeignKey
+
+A many-to-one relationship. Requires two positional arguments: the model to which the model is related and the `on_delete` option.
+
+```python
+class Car(models.Model):
+    manufacturer = models.ForeignKey(
+        'Manufacturer',
+        on_delete=models.CASCADE,
+    )
+```
+
+### Parameters
+
+<ParamField path="to" type="Model | str" required>
+  The model to which this field relates. Can be a model class or a string in the format 'app_label.ModelName' or 'ModelName'. Use 'self' for recursive relationships.
+</ParamField>
+
+<ParamField path="on_delete" required>
+  Defines behavior when the referenced object is deleted. Options:
+  - `CASCADE`: Delete this object when the referenced object is deleted.
+  - `PROTECT`: Prevent deletion of the referenced object.
+  - `SET_NULL`: Set the ForeignKey to null (requires null=True).
+  - `SET_DEFAULT`: Set the ForeignKey to its default value.
+  - `SET()`: Set the ForeignKey to the value passed to SET().
+  - `DO_NOTHING`: Take no action (may cause database integrity errors).
+</ParamField>
+
+<ParamField path="related_name" type="str" optional>
+  The name to use for the relation from the related object back to this one. Use '+' to prevent creating a backward relation.
+</ParamField>
+
+<ParamField path="related_query_name" type="str" optional>
+  The name to use for the reverse filter name from the target model. Defaults to the value of related_name.
+</ParamField>
+
+<ParamField path="limit_choices_to" type="dict | Q" optional>
+  Limits the available choices for this field when using ModelForms or the admin.
+</ParamField>
+
+<ParamField path="to_field" type="str" optional>
+  The field on the related object that the relation is to. By default, uses the primary key of the related object.
+</ParamField>
+
+<ParamField path="db_constraint" type="bool" default="True">
+  Controls whether a constraint should be created in the database for this foreign key.
+</ParamField>
+
+<ParamField path="swappable" type="bool" default="True">
+  Controls the migration framework's reaction to this ForeignKey if it points to a swappable model.
+</ParamField>
+
+**Reference:** `django/db/models/fields/related.py:98`
+
+### Database Representation
+
+A ForeignKey creates a column in the database with the name `{field_name}_id` that stores the primary key of the related object.
+
+### Accessing Related Objects
+
+```python
+# Forward access (many-to-one)
+car = Car.objects.get(pk=1)
+manufacturer = car.manufacturer
+
+# Reverse access (one-to-many)
+manufacturer = Manufacturer.objects.get(pk=1)
+cars = manufacturer.car_set.all()  # or use related_name
+```
+
+## OneToOneField
+
+A one-to-one relationship. Similar to ForeignKey with unique=True, but the reverse side will directly return a single object instead of a queryset.
+
+```python
+class Restaurant(models.Model):
+    place = models.OneToOneField(
+        Place,
+        on_delete=models.CASCADE,
+        primary_key=True,
+    )
+```
+
+### Parameters
+
+Accepts all the same arguments as ForeignKey, plus:
+
+<ParamField path="to" type="Model | str" required>
+  The model to which this field relates.
+</ParamField>
+
+<ParamField path="on_delete" required>
+  Behavior when the referenced object is deleted. Same options as ForeignKey.
+</ParamField>
+
+<ParamField path="parent_link" type="bool" default="False">
+  When True in a model that inherits from another concrete model, indicates that this field should be used as the link back to the parent class.
+</ParamField>
+
+**Reference:** `django/db/models/fields/related.py:98`
+
+### Accessing Related Objects
+
+```python
+# Forward access
+restaurant = Restaurant.objects.get(pk=1)
+place = restaurant.place
+
+# Reverse access
+place = Place.objects.get(pk=1)
+restaurant = place.restaurant  # Single object, not a queryset
+```
+
+## ManyToManyField
+
+A many-to-many relationship. Requires one positional argument: the model to which the model is related.
+
+```python
+class Pizza(models.Model):
+    toppings = models.ManyToManyField(
+        'Topping',
+        related_name='pizzas',
+    )
+```
+
+### Parameters
+
+<ParamField path="to" type="Model | str" required>
+  The model to which this field relates. Can be a model class or string. Use 'self' for recursive relationships.
+</ParamField>
+
+<ParamField path="related_name" type="str" optional>
+  The name to use for the relation from the related object back to this one. Use '+' to prevent creating a backward relation.
+</ParamField>
+
+<ParamField path="related_query_name" type="str" optional>
+  The name to use for the reverse filter name from the target model.
+</ParamField>
+
+<ParamField path="limit_choices_to" type="dict | Q" optional>
+  Limits the available choices for this field in forms.
+</ParamField>
+
+<ParamField path="symmetrical" type="bool" default="True">
+  Only used for recursive relationships on self. If True, Django won't add a reverse relation. If False, the relation will be asymmetrical.
+</ParamField>
+
+<ParamField path="through" type="Model | str" optional>
+  The intermediate model to use for the many-to-many relationship. Used for defining extra fields on the relationship.
+</ParamField>
+
+<ParamField path="through_fields" type="tuple" optional>
+  A 2-tuple specifying the fields to use for the relationship when using a custom through model.
+</ParamField>
+
+<ParamField path="db_table" type="str" optional>
+  The name of the table to create for storing the many-to-many data. If not provided, Django creates a default name.
+</ParamField>
+
+<ParamField path="db_constraint" type="bool" default="True">
+  Controls whether constraints should be created in the database for the foreign keys in the intermediary table.
+</ParamField>
+
+<ParamField path="swappable" type="bool" default="True">
+  Controls the migration framework's reaction if this ManyToManyField points to a swappable model.
+</ParamField>
+
+**Reference:** `django/db/models/fields/related.py:98`
+
+### Intermediate Table
+
+Django automatically creates an intermediary join table to represent the many-to-many relationship. You can specify extra fields using the `through` parameter:
+
+```python
+class Person(models.Model):
+    name = models.CharField(max_length=128)
+
+class Group(models.Model):
+    name = models.CharField(max_length=128)
+    members = models.ManyToManyField(
+        Person,
+        through='Membership',
+    )
+
+class Membership(models.Model):
+    person = models.ForeignKey(Person, on_delete=models.CASCADE)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    date_joined = models.DateField()
+    invite_reason = models.CharField(max_length=64)
+```
+
+### Accessing Related Objects
+
+```python
+# Add objects to the relationship
+pizza = Pizza.objects.get(pk=1)
+topping = Topping.objects.get(pk=1)
+pizza.toppings.add(topping)
+
+# Access related objects
+toppings = pizza.toppings.all()
+
+# Reverse access
+topping = Topping.objects.get(pk=1)
+pizzas = topping.pizzas.all()
+
+# Remove objects
+pizza.toppings.remove(topping)
+
+# Clear all relationships
+pizza.toppings.clear()
+
+# Set the relationship to a specific set
+pizza.toppings.set([topping1, topping2])
+```
+
+## RelatedManager Methods
+
+For ForeignKey (reverse), OneToOneField (reverse), and ManyToManyField relationships, Django provides a special manager with additional methods:
+
+### add()
+
+Adds the specified model objects to the related object set.
+
+```python
+manufacturer.car_set.add(car1, car2)
+pizza.toppings.add(topping1, topping2)
+```
+
+<ParamField path="*objs" type="Model">
+  One or more model instances or primary keys to add.
+</ParamField>
+
+<ParamField path="bulk" type="bool" default="True">
+  If False, signals will be sent for each addition.
+</ParamField>
+
+### create()
+
+Creates a new object, saves it, and adds it to the related object set.
+
+```python
+car = manufacturer.car_set.create(name='Civic', year=2024)
+```
+
+<ParamField path="**kwargs" type="dict">
+  Field values for the new object.
+</ParamField>
+
+<ResponseField name="return" type="Model">
+  The created object.
+</ResponseField>
+
+### remove()
+
+Removes the specified model objects from the related object set.
+
+```python
+manufacturer.car_set.remove(car1, car2)
+pizza.toppings.remove(topping1)
+```
+
+<ParamField path="*objs" type="Model">
+  One or more model instances or primary keys to remove.
+</ParamField>
+
+<ParamField path="bulk" type="bool" default="True">
+  If False, signals will be sent for each removal.
+</ParamField>
+
+### clear()
+
+Removes all objects from the related object set.
+
+```python
+manufacturer.car_set.clear()
+pizza.toppings.clear()
+```
+
+<ParamField path="bulk" type="bool" default="True">
+  If False, signals will be sent for each removal.
+</ParamField>
+
+### set()
+
+Replaces the set of related objects.
+
+```python
+manufacturer.car_set.set([car1, car2])
+pizza.toppings.set([topping1, topping2, topping3])
+```
+
+<ParamField path="objs" type="list[Model]">
+  An iterable of model instances or primary keys.
+</ParamField>
+
+<ParamField path="bulk" type="bool" default="True">
+  If False, signals will be sent for additions and removals.
+</ParamField>
+
+<ParamField path="clear" type="bool" default="False">
+  If True, clears the existing set before adding new objects.
+</ParamField>
+
+## on_delete Options
+
+The `on_delete` parameter defines what happens when the referenced object is deleted:
+
+### CASCADE
+
+Deletes the object containing the ForeignKey.
+
+```python
+manufacturer = models.ForeignKey(Manufacturer, on_delete=models.CASCADE)
+```
+
+### PROTECT
+
+Prevents deletion of the referenced object by raising ProtectedError.
+
+```python
+manufacturer = models.ForeignKey(Manufacturer, on_delete=models.PROTECT)
+```
+
+### RESTRICT
+
+Prevents deletion of the referenced object by raising RestrictedError. Unlike PROTECT, allows deletion if there are other objects that reference the same object but can be deleted together.
+
+```python
+manufacturer = models.ForeignKey(Manufacturer, on_delete=models.RESTRICT)
+```
+
+### SET_NULL
+
+Sets the ForeignKey to NULL. Requires null=True.
+
+```python
+manufacturer = models.ForeignKey(
+    Manufacturer,
+    on_delete=models.SET_NULL,
+    null=True,
+)
+```
+
+### SET_DEFAULT
+
+Sets the ForeignKey to its default value. Requires a default value.
+
+```python
+manufacturer = models.ForeignKey(
+    Manufacturer,
+    on_delete=models.SET_DEFAULT,
+    default=get_default_manufacturer,
+)
+```
+
+### SET()
+
+Sets the ForeignKey to the value passed to SET().
+
+```python
+def get_sentinel_manufacturer():
+    return Manufacturer.objects.get_or_create(name='deleted')[0]
+
+manufacturer = models.ForeignKey(
+    Manufacturer,
+    on_delete=models.SET(get_sentinel_manufacturer),
+)
+```
+
+### DO_NOTHING
+
+Takes no action. Can cause database integrity errors.
+
+```python
+manufacturer = models.ForeignKey(Manufacturer, on_delete=models.DO_NOTHING)
+```
+
+**Reference:** `django/db/models/deletion.py:13-21`

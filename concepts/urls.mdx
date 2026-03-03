@@ -1,0 +1,446 @@
+---
+title: 'URL Routing'
+description: 'Map URLs to views using Django URL dispatcher and patterns'
+---
+
+## Overview
+
+Django's URL dispatcher connects URL patterns to view functions or classes. From `django.urls.resolvers`, the `URLResolver` class resolves incoming URLs and extracts parameters.
+
+<Note>
+  URL routing happens in two directions: resolving incoming requests to views, and reverse URL generation from view names.
+</Note>
+
+## URL Patterns
+
+### Basic Patterns
+
+From `django.urls.conf`, use `path()` for simple patterns:
+
+```python
+# myapp/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # Static URLs
+    path('', views.index, name='index'),
+    path('about/', views.about, name='about'),
+    path('contact/', views.contact, name='contact'),
+    
+    # URLs with parameters
+    path('articles/<int:pk>/', views.article_detail, name='article-detail'),
+    path('articles/<slug:slug>/', views.article_by_slug, name='article-slug'),
+    path('archive/<int:year>/', views.year_archive, name='year-archive'),
+    path('archive/<int:year>/<int:month>/', views.month_archive, name='month-archive'),
+]
+```
+
+### Path Converters
+
+Django provides built-in path converters:
+
+```python
+# String (default) - matches any non-empty string except '/'
+path('articles/<str:category>/', views.category)
+
+# Integer - matches zero or positive integers
+path('articles/<int:pk>/', views.detail)
+
+# Slug - matches slug strings (letters, numbers, hyphens, underscores)
+path('articles/<slug:slug>/', views.by_slug)
+
+# UUID - matches UUID strings
+path('items/<uuid:id>/', views.item)
+
+# Path - matches any non-empty string including '/'
+path('files/<path:filepath>/', views.download)
+```
+
+<Tip>
+  Path converters automatically validate and convert captured values. For example, `<int:pk>` ensures the value is an integer and converts it from string.
+</Tip>
+
+## Regular Expression Patterns
+
+For complex patterns, use `re_path()` with regex:
+
+```python
+from django.urls import re_path
+from . import views
+
+urlpatterns = [
+    # Match 4-digit year
+    re_path(r'^archive/(?P<year>[0-9]{4})/$', views.year_archive),
+    
+    # Match year and month
+    re_path(r'^archive/(?P<year>[0-9]{4})/(?P<month>[0-9]{2})/$', views.month_archive),
+    
+    # Match article with optional page number
+    re_path(r'^article/(?P<slug>[\w-]+)(?:/(?P<page>\d+))?/$', views.article),
+    
+    # Match file extension
+    re_path(r'^files/(?P<filename>.+\.pdf)$', views.pdf_file),
+]
+```
+
+<Warning>
+  Regular expressions in `re_path()` must use named groups `(?P<name>...)` to capture parameters. Unnamed groups are not supported.
+</Warning>
+
+## URL Configuration
+
+### Project URLs
+
+The root URL configuration is defined in `settings.ROOT_URLCONF`:
+
+```python
+# myproject/urls.py
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('blog/', include('blog.urls')),
+    path('api/', include('api.urls')),
+    path('', include('home.urls')),
+]
+```
+
+### Including URLs
+
+From `django.urls.conf.include()`, organize URLs by including app URL configs:
+
+```python
+# Project urls.py
+from django.urls import path, include
+
+urlpatterns = [
+    # Include app URLs
+    path('blog/', include('blog.urls')),
+    
+    # Include with namespace
+    path('shop/', include('shop.urls', namespace='shop')),
+    
+    # Include tuple (urls, app_name)
+    path('api/', include(('api.urls', 'api'), namespace='api_v1')),
+]
+```
+
+```python
+# blog/urls.py
+from django.urls import path
+from . import views
+
+app_name = 'blog'  # Application namespace
+
+urlpatterns = [
+    path('', views.article_list, name='list'),
+    path('<int:pk>/', views.article_detail, name='detail'),
+    path('create/', views.article_create, name='create'),
+]
+```
+
+## URL Names and Namespaces
+
+### Naming URLs
+
+Name URLs for reverse lookup:
+
+```python
+# urls.py
+urlpatterns = [
+    path('articles/', views.article_list, name='article-list'),
+    path('articles/<int:pk>/', views.article_detail, name='article-detail'),
+    path('articles/create/', views.article_create, name='article-create'),
+]
+```
+
+### Application Namespaces
+
+```python
+# blog/urls.py
+app_name = 'blog'
+
+urlpatterns = [
+    path('', views.article_list, name='list'),
+    path('<int:pk>/', views.article_detail, name='detail'),
+]
+
+# shop/urls.py
+app_name = 'shop'
+
+urlpatterns = [
+    path('', views.product_list, name='list'),  # Same name, different namespace
+    path('<int:pk>/', views.product_detail, name='detail'),
+]
+```
+
+## Reverse URL Resolution
+
+### In Python Code
+
+```python
+from django.urls import reverse
+from django.shortcuts import redirect
+
+# Simple reverse
+url = reverse('article-list')  # /articles/
+
+# Reverse with arguments
+url = reverse('article-detail', args=[42])  # /articles/42/
+url = reverse('article-detail', kwargs={'pk': 42})  # /articles/42/
+
+# Reverse with namespace
+url = reverse('blog:detail', kwargs={'pk': 42})  # /blog/42/
+
+# Use in redirects
+return redirect('article-detail', pk=article.id)
+return redirect('blog:list')
+```
+
+### In Templates
+
+```html
+<!-- Simple URL -->
+<a href="{% url 'article-list' %}">Articles</a>
+
+<!-- URL with arguments -->
+<a href="{% url 'article-detail' article.id %}">View Article</a>
+<a href="{% url 'article-detail' pk=article.id %}">View Article</a>
+
+<!-- URL with namespace -->
+<a href="{% url 'blog:list' %}">Blog</a>
+<a href="{% url 'blog:detail' pk=42 %}">Article 42</a>
+
+<!-- Store in variable -->
+{% url 'article-detail' article.id as article_url %}
+<a href="{{ article_url }}">{{ article.title }}</a>
+```
+
+### In Models
+
+```python
+from django.db import models
+from django.urls import reverse
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
+    
+    def get_absolute_url(self):
+        """Return canonical URL for this object"""
+        return reverse('article-detail', kwargs={'pk': self.pk})
+        # or using slug:
+        # return reverse('article-slug', kwargs={'slug': self.slug})
+```
+
+<Tip>
+  Use `reverse_lazy()` in class-based views and model fields to avoid circular import issues during URL resolution at import time.
+</Tip>
+
+## URL Patterns with Class-Based Views
+
+```python
+from django.urls import path
+from django.views.generic import ListView, DetailView, CreateView
+from .models import Article
+from . import views
+
+urlpatterns = [
+    # Generic views
+    path('articles/', ListView.as_view(model=Article), name='article-list'),
+    path('articles/<int:pk>/', DetailView.as_view(model=Article), name='article-detail'),
+    
+    # Custom class-based views
+    path('articles/create/', views.ArticleCreateView.as_view(), name='article-create'),
+    path('articles/<int:pk>/edit/', views.ArticleUpdateView.as_view(), name='article-edit'),
+]
+```
+
+## Custom Path Converters
+
+Create custom converters for specialized URL patterns:
+
+```python
+# myapp/converters.py
+class FourDigitYearConverter:
+    regex = '[0-9]{4}'
+    
+    def to_python(self, value):
+        return int(value)
+    
+    def to_url(self, value):
+        return '%04d' % value
+
+class CategoryConverter:
+    regex = '[a-z]+(?:-[a-z]+)*'
+    
+    def to_python(self, value):
+        return value.lower()
+    
+    def to_url(self, value):
+        return value.lower()
+```
+
+```python
+# urls.py
+from django.urls import path, register_converter
+from . import converters, views
+
+register_converter(converters.FourDigitYearConverter, 'yyyy')
+register_converter(converters.CategoryConverter, 'category')
+
+urlpatterns = [
+    path('archive/<yyyy:year>/', views.year_archive),
+    path('category/<category:slug>/', views.category),
+]
+```
+
+## URL Parameters in Views
+
+Access captured URL parameters in views:
+
+```python
+# Function-based views
+def article_detail(request, pk):
+    article = get_object_or_404(Article, pk=pk)
+    return render(request, 'article.html', {'article': article})
+
+def archive(request, year, month):
+    articles = Article.objects.filter(
+        published_date__year=year,
+        published_date__month=month
+    )
+    return render(request, 'archive.html', {'articles': articles})
+
+# Class-based views
+class ArticleDetailView(DetailView):
+    model = Article
+    
+    def get_object(self):
+        # self.kwargs contains URL parameters
+        pk = self.kwargs.get('pk')
+        return get_object_or_404(Article, pk=pk)
+```
+
+## Query Strings
+
+Access query parameters separately from URL patterns:
+
+```python
+# URL: /search/?q=django&page=2
+
+def search(request):
+    query = request.GET.get('q', '')         # 'django'
+    page = request.GET.get('page', 1)        # '2'
+    category = request.GET.get('category')    # None if not provided
+    
+    # Get multiple values
+    tags = request.GET.getlist('tag')        # ['python', 'web']
+    
+    return render(request, 'search.html', {
+        'query': query,
+        'results': search_results(query)
+    })
+```
+
+```html
+<!-- Generate URLs with query strings -->
+<a href="{% url 'search' %}?q={{ query }}&page=2">Next Page</a>
+```
+
+## Error Handlers
+
+Customize error views:
+
+```python
+# myproject/urls.py
+from django.urls import path
+from . import views
+
+# Custom error handlers
+handler404 = 'myapp.views.custom_404'
+handler500 = 'myapp.views.custom_500'
+handler403 = 'myapp.views.custom_403'
+handler400 = 'myapp.views.custom_400'
+
+urlpatterns = [
+    # ... your URL patterns
+]
+```
+
+```python
+# myapp/views.py
+from django.shortcuts import render
+
+def custom_404(request, exception):
+    return render(request, '404.html', status=404)
+
+def custom_500(request):
+    return render(request, '500.html', status=500)
+```
+
+## URL Resolution Process
+
+From `django.urls.resolvers.URLResolver`, Django resolves URLs in this order:
+
+1. **Match patterns**: Compare request path against URL patterns
+2. **Extract parameters**: Capture URL parameters using converters
+3. **Return ResolverMatch**: Contains view function, args, kwargs, and URL name
+4. **Call view**: Execute matched view with extracted parameters
+
+```python
+# Understanding resolution
+from django.urls import resolve
+
+match = resolve('/articles/42/')
+print(match.url_name)        # 'article-detail'
+print(match.kwargs)          # {'pk': 42}
+print(match.view_name)       # 'blog:article-detail' (with namespace)
+print(match.func)            # The view function
+```
+
+## Best Practices
+
+1. **Always name URLs**: Use `name` parameter for reverse lookups
+2. **Use namespaces**: Organize URLs with app_name and namespace
+3. **Prefer path() over re_path()**: Use simple path() when possible
+4. **Keep URLs readable**: Use descriptive URL patterns
+5. **Use trailing slashes**: Follow Django convention with trailing `/`
+6. **Organize by feature**: Group related URLs together
+
+<Warning>
+  Avoid hardcoding URLs in templates or code. Always use `reverse()` or `{% url %}` for maintainability.
+</Warning>
+
+## Common Patterns
+
+```python
+# RESTful URLs
+urlpatterns = [
+    path('articles/', views.article_list, name='article-list'),           # GET: list, POST: create
+    path('articles/<int:pk>/', views.article_detail, name='article-detail'),  # GET: detail, PUT: update, DELETE: delete
+]
+
+# CRUD URLs
+urlpatterns = [
+    path('articles/', views.article_list, name='article-list'),
+    path('articles/create/', views.article_create, name='article-create'),
+    path('articles/<int:pk>/', views.article_detail, name='article-detail'),
+    path('articles/<int:pk>/edit/', views.article_edit, name='article-edit'),
+    path('articles/<int:pk>/delete/', views.article_delete, name='article-delete'),
+]
+
+# Nested resources
+urlpatterns = [
+    path('authors/<int:author_id>/articles/', views.author_articles),
+    path('authors/<int:author_id>/articles/<int:pk>/', views.author_article_detail),
+]
+```
+
+## Next Steps
+
+- Learn about [Views](/concepts/views) to handle URL-matched requests
+- Explore [Middleware](/concepts/middleware) for request preprocessing
+- Understand [Class-Based Views](/concepts/views#class-based-views) URL integration

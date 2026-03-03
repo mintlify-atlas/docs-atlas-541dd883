@@ -1,80 +1,404 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Build your first Django application in minutes
 ---
 
-## Get started in three steps
+## Build Your First Django App
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will walk you through creating a simple Django application from scratch. You'll create a blog with posts that can be viewed and managed through Django's admin interface.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Make sure you have [Django installed](/installation) before starting this guide.
 </Note>
+
+<Steps>
+  <Step title="Create a Django Project">
+    Start by creating a new Django project. This sets up the basic structure and configuration:
+    
+    ```bash
+    django-admin startproject mysite
+    cd mysite
+    ```
+    
+    This creates a project directory with the following structure:
+    
+    ```
+    mysite/
+        manage.py
+        mysite/
+            __init__.py
+            settings.py
+            urls.py
+            asgi.py
+            wsgi.py
+    ```
+    
+    <Tip>
+      `manage.py` is your main command-line utility. You'll use it for running the development server, creating apps, running migrations, and more.
+    </Tip>
+  </Step>
+
+  <Step title="Create a Django App">
+    Django projects are composed of apps. Create a blog app:
+    
+    ```bash
+    python manage.py startapp blog
+    ```
+    
+    This creates a `blog/` directory with the following structure:
+    
+    ```
+    blog/
+        __init__.py
+        admin.py
+        apps.py
+        models.py
+        tests.py
+        views.py
+        migrations/
+            __init__.py
+    ```
+    
+    Now register the app in `mysite/settings.py`:
+    
+    ```python mysite/settings.py
+    INSTALLED_APPS = [
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'blog',  # Add your app here
+    ]
+    ```
+  </Step>
+
+  <Step title="Define a Model">
+    Models define your database structure. Create a `Post` model in `blog/models.py`:
+    
+    ```python blog/models.py
+    from django.db import models
+    from django.utils import timezone
+    from django.utils.translation import gettext_lazy as _
+    
+    class Post(models.Model):
+        """A blog post with title, content, and publication date."""
+        
+        title = models.CharField(
+            _("title"),
+            max_length=200,
+            help_text=_("The title of the blog post")
+        )
+        content = models.TextField(
+            _("content"),
+            blank=True,
+            help_text=_("The main content of the post")
+        )
+        published_date = models.DateTimeField(
+            _("published date"),
+            default=timezone.now,
+            db_index=True
+        )
+        created_date = models.DateTimeField(
+            _("created date"),
+            auto_now_add=True
+        )
+        updated_date = models.DateTimeField(
+            _("updated date"),
+            auto_now=True
+        )
+        
+        class Meta:
+            ordering = ['-published_date']
+            verbose_name = _("post")
+            verbose_name_plural = _("posts")
+        
+        def __str__(self):
+            return self.title
+    ```
+    
+    <Note>
+      This model uses patterns from Django's source code:
+      - `verbose_name` for human-readable names (django/contrib/auth/models.py:39)
+      - `gettext_lazy` for internationalization support (django/contrib/auth/models.py:13)
+      - `db_index` for query optimization (django/contrib/flatpages/models.py:9)
+      - `Meta` class for model options (django/contrib/flatpages/models.py:31)
+    </Note>
+  </Step>
+
+  <Step title="Create and Run Migrations">
+    Django uses migrations to apply model changes to your database:
+    
+    ```bash
+    # Create migration files
+    python manage.py makemigrations blog
+    
+    # Apply migrations to database
+    python manage.py migrate
+    ```
+    
+    You should see output like:
+    
+    ```
+    Migrations for 'blog':
+      blog/migrations/0001_initial.py
+        - Create model Post
+    
+    Operations to perform:
+      Apply all migrations: admin, auth, blog, contenttypes, sessions
+    Running migrations:
+      Applying blog.0001_initial... OK
+    ```
+    
+    <Tip>
+      Run `makemigrations` whenever you change your models, then `migrate` to apply the changes to your database.
+    </Tip>
+  </Step>
+
+  <Step title="Create Views and URL Patterns">
+    Create views to display your blog posts. Update `blog/views.py`:
+    
+    ```python blog/views.py
+    from django.http import HttpResponse
+    from django.shortcuts import get_object_or_404, render
+    from django.views.generic import ListView, DetailView
+    
+    from .models import Post
+    
+    def index(request):
+        """Simple function-based view."""
+        posts = Post.objects.all()[:5]
+        return render(request, 'blog/index.html', {'posts': posts})
+    
+    class PostListView(ListView):
+        """Class-based view for listing posts."""
+        model = Post
+        context_object_name = 'posts'
+        paginate_by = 10
+        template_name = 'blog/post_list.html'
+        
+        def get_queryset(self):
+            """Return published posts ordered by date."""
+            return Post.objects.all().order_by('-published_date')
+    
+    class PostDetailView(DetailView):
+        """Class-based view for a single post."""
+        model = Post
+        context_object_name = 'post'
+        template_name = 'blog/post_detail.html'
+    ```
+    
+    Create a URL configuration in `blog/urls.py`:
+    
+    ```python blog/urls.py
+    from django.urls import path
+    from . import views
+    
+    app_name = 'blog'
+    
+    urlpatterns = [
+        path('', views.PostListView.as_view(), name='post_list'),
+        path('post/<int:pk>/', views.PostDetailView.as_view(), name='post_detail'),
+        path('simple/', views.index, name='index'),
+    ]
+    ```
+    
+    Include the blog URLs in your main `mysite/urls.py`:
+    
+    ```python mysite/urls.py
+    from django.contrib import admin
+    from django.urls import path, include
+    
+    urlpatterns = [
+        path('admin/', admin.site.urls),
+        path('blog/', include('blog.urls')),
+    ]
+    ```
+    
+    <Note>
+      These views use Django's built-in generic views:
+      - `ListView` for displaying multiple objects (django/views/generic/list.py:9)
+      - `DetailView` for displaying a single object (django/views/generic/detail.py)
+      - `get_object_or_404` shortcut (django/shortcuts.py:70)
+    </Note>
+  </Step>
+
+  <Step title="Register Model in Admin">
+    Make your model editable in Django's admin interface. Update `blog/admin.py`:
+    
+    ```python blog/admin.py
+    from django.contrib import admin
+    from .models import Post
+    
+    @admin.register(Post)
+    class PostAdmin(admin.ModelAdmin):
+        list_display = ['title', 'published_date', 'created_date']
+        list_filter = ['published_date', 'created_date']
+        search_fields = ['title', 'content']
+        date_hierarchy = 'published_date'
+        ordering = ['-published_date']
+    ```
+    
+    Create a superuser to access the admin:
+    
+    ```bash
+    python manage.py createsuperuser
+    ```
+    
+    Follow the prompts to set username, email, and password.
+  </Step>
+
+  <Step title="Create Templates">
+    Create template files for your views. First, create a templates directory:
+    
+    ```bash
+    mkdir -p blog/templates/blog
+    ```
+    
+    Create `blog/templates/blog/post_list.html`:
+    
+    ```html blog/templates/blog/post_list.html
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Blog Posts</title>
+    </head>
+    <body>
+        <h1>Blog Posts</h1>
+        
+        {% if posts %}
+            <ul>
+            {% for post in posts %}
+                <li>
+                    <h2>{{ post.title }}</h2>
+                    <p>Published: {{ post.published_date|date:"F d, Y" }}</p>
+                    <p>{{ post.content|truncatewords:30 }}</p>
+                </li>
+            {% endfor %}
+            </ul>
+            
+            {% if is_paginated %}
+                <div class="pagination">
+                    {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                    {% endif %}
+                    
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}">Next</a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% else %}
+            <p>No posts available.</p>
+        {% endif %}
+    </body>
+    </html>
+    ```
+  </Step>
+
+  <Step title="Start the Development Server">
+    Run Django's development server:
+    
+    ```bash
+    python manage.py runserver
+    ```
+    
+    You should see:
+    
+    ```
+    Watching for file changes with StatReloader
+    Performing system checks...
+    
+    System check identified no issues (0 silenced).
+    March 03, 2026 - 15:00:00
+    Django version 5.1, using settings 'mysite.settings'
+    Starting development server at http://127.0.0.1:8000/
+    Quit the server with CONTROL-C.
+    ```
+    
+    <Tip>
+      To run on a different port: `python manage.py runserver 8080`
+      
+      To allow external connections: `python manage.py runserver 0.0.0.0:8000`
+    </Tip>
+  </Step>
+
+  <Step title="Test Your Application">
+    Open your browser and visit:
+    
+    - **Admin interface**: http://127.0.0.1:8000/admin/
+      - Log in with your superuser credentials
+      - Click "Posts" to add blog posts
+    
+    - **Blog posts list**: http://127.0.0.1:8000/blog/
+      - View all your published posts
+    
+    - **Individual post**: http://127.0.0.1:8000/blog/post/1/
+      - View a specific post (after creating one in admin)
+    
+    <Note>
+      The development server automatically reloads when you make code changes. No need to restart it manually!
+    </Note>
+  </Step>
+</Steps>
+
+## What You've Built
+
+Congratulations! You've created a Django application with:
+
+- **Data models** defining your database schema
+- **URL routing** mapping URLs to views
+- **Views** handling requests and returning responses
+- **Templates** rendering HTML with Django's template language
+- **Admin interface** for content management
+- **Database migrations** for schema versioning
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Models & ORM"
+    icon="database"
+    href="/guides/models"
+  >
+    Deep dive into Django's powerful Object-Relational Mapper
+  </Card>
+  <Card
+    title="Views & Templates"
+    icon="eye"
+    href="/guides/views"
+  >
+    Learn about function-based and class-based views
+  </Card>
+  <Card
+    title="Forms"
+    icon="file-lines"
+    href="/guides/forms"
+  >
+    Handle user input with Django's form system
+  </Card>
+  <Card
+    title="Authentication"
+    icon="lock"
+    href="/guides/authentication"
+  >
+    Add user registration and login to your app
+  </Card>
+</CardGroup>
+
+## Code Examples From Django Source
+
+The code in this guide uses real patterns from Django's source:
+
+- **Model definition**: Based on `Permission` and `Group` models (django/contrib/auth/models.py:39-138)
+- **Generic views**: `ListView` and `DetailView` (django/views/generic/list.py, django/views/generic/detail.py)
+- **URL patterns**: Using `path()` and `include()` (django/urls/conf.py)
+- **Shortcuts**: `render()` and `get_object_or_404()` (django/shortcuts.py:19-98)
+- **Field types**: `CharField`, `TextField`, `DateTimeField` (django/db/models/fields/)
+
+<Tip>
+  All imports and patterns used in this guide come directly from Django's source code at django/contrib/, django/db/models/, django/views/, and django/urls/.
+</Tip>

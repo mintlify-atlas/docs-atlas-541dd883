@@ -1,0 +1,532 @@
+---
+title: "Signal System"
+description: "Master Django's signal dispatcher, connect receivers to model signals, and create custom signals"
+---
+
+## Introduction
+
+Django includes a "signal dispatcher" that allows decoupled applications to get notified when actions occur elsewhere in the framework. Signals allow certain senders to notify a set of receivers when an action has taken place.
+
+## Built-in Model Signals
+
+Django provides several built-in signals from `django.db.models.signals`.
+
+### Available Model Signals
+
+```python
+from django.db.models.signals import (
+    pre_init,      # Before model __init__
+    post_init,     # After model __init__
+    pre_save,      # Before model.save()
+    post_save,     # After model.save()
+    pre_delete,    # Before model.delete()
+    post_delete,   # After model.delete()
+    m2m_changed,   # When ManyToMany relation changes
+)
+from django.core.signals import (
+    request_started,   # When HTTP request starts
+    request_finished,  # When HTTP request finishes
+)
+```
+
+### Signal Implementation
+
+From Django source (`django/db/models/signals.py`):
+
+```python
+from django.dispatch import Signal
+
+class ModelSignal(Signal):
+    """
+    Signal subclass that allows the sender to be lazily specified as a string
+    of the `app_label.ModelName` form.
+    """
+    pass
+
+# Model signals with caching enabled
+pre_init = ModelSignal(use_caching=True)
+post_init = ModelSignal(use_caching=True)
+pre_save = ModelSignal(use_caching=True)
+post_save = ModelSignal(use_caching=True)
+pre_delete = ModelSignal(use_caching=True)
+post_delete = ModelSignal(use_caching=True)
+m2m_changed = ModelSignal(use_caching=True)
+
+# Migration signals
+pre_migrate = Signal()
+post_migrate = Signal()
+```
+
+## Connecting to Signals
+
+### Using the @receiver Decorator
+
+The recommended way to connect to signals is using the `@receiver` decorator:
+
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from myapp.models import Article
+
+@receiver(post_save, sender=Article)
+def article_saved(sender, instance, created, **kwargs):
+    if created:
+        print(f"New article created: {instance.title}")
+    else:
+        print(f"Article updated: {instance.title}")
+```
+
+### Connecting Multiple Signals
+
+```python
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+
+@receiver([post_save, post_delete], sender=Article)
+def article_changed(sender, instance, **kwargs):
+    # Handle both save and delete
+    invalidate_cache(instance)
+```
+
+From Django source (`django/dispatch/dispatcher.py`):
+
+```python
+def receiver(signal, **kwargs):
+    """
+    A decorator for connecting receivers to signals. Used by passing in the
+    signal (or list of signals) and keyword arguments to connect::
+
+        @receiver(post_save, sender=MyModel)
+        def signal_receiver(sender, **kwargs):
+            ...
+
+        @receiver([post_save, post_delete], sender=MyModel)
+        def signals_receiver(sender, **kwargs):
+            ...
+    """
+    def _decorator(func):
+        if isinstance(signal, (list, tuple)):
+            for s in signal:
+                s.connect(func, **kwargs)
+        else:
+            signal.connect(func, **kwargs)
+        return func
+    return _decorator
+```
+
+### Manual Connection
+
+```python
+from django.db.models.signals import post_save
+from myapp.models import Article
+
+def my_handler(sender, instance, created, **kwargs):
+    print(f"Article saved: {instance.title}")
+
+# Connect the signal
+post_save.connect(my_handler, sender=Article)
+
+# Disconnect later if needed
+post_save.disconnect(my_handler, sender=Article)
+```
+
+## Signal Handler Arguments
+
+### post_save Signal
+
+```python
+@receiver(post_save, sender=Article)
+def handle_article_save(sender, instance, created, raw, using, update_fields, **kwargs):
+    """
+    sender: The model class (Article)
+    instance: The actual instance being saved
+    created: Boolean; True if a new record was created
+    raw: True if model is saved exactly as presented (fixtures)
+    using: Database alias being used
+    update_fields: Set of fields passed to save(), or None
+    **kwargs: Accept extra keyword arguments for future compatibility
+    """
+    if created:
+        send_notification(instance)
+```
+
+### pre_save Signal
+
+```python
+@receiver(pre_save, sender=Article)
+def handle_article_pre_save(sender, instance, raw, using, update_fields, **kwargs):
+    """
+    Called before save() is executed.
+    Can modify instance before it's saved.
+    """
+    if not instance.slug:
+        instance.slug = slugify(instance.title)
+```
+
+### post_delete Signal
+
+```python
+@receiver(post_delete, sender=Article)
+def handle_article_delete(sender, instance, using, **kwargs):
+    """
+    sender: The model class
+    instance: The instance being deleted
+    using: Database alias
+    """
+    # Clean up related files
+    if instance.image:
+        instance.image.delete(save=False)
+```
+
+### m2m_changed Signal
+
+```python
+from django.db.models.signals import m2m_changed
+
+@receiver(m2m_changed, sender=Article.tags.through)
+def handle_tags_changed(sender, instance, action, reverse, model, pk_set, **kwargs):
+    """
+    action: Type of update (pre_add, post_add, pre_remove, post_remove, pre_clear, post_clear)
+    instance: The instance being modified
+    reverse: Indicates direction of relation
+    model: The related model class
+    pk_set: Set of primary keys of objects added/removed/cleared
+    """
+    if action == "post_add":
+        print(f"Tags added: {pk_set}")
+    elif action == "post_remove":
+        print(f"Tags removed: {pk_set}")
+```
+
+<Warning>
+Always include `**kwargs` in your signal handlers to ensure forward compatibility if Django adds new arguments in the future.
+</Warning>
+
+## Async Signal Handlers
+
+Django signals support both synchronous and asynchronous receivers.
+
+### Async Receivers
+
+```python
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+import asyncio
+
+@receiver(post_save, sender=Article)
+async def async_article_handler(sender, instance, created, **kwargs):
+    """Async signal receiver."""
+    if created:
+        # Perform async operations
+        await send_async_notification(instance)
+        await update_search_index(instance)
+
+# Mix sync and async receivers
+@receiver(post_save, sender=Article)
+def sync_handler(sender, instance, **kwargs):
+    print("Sync handler called")
+
+@receiver(post_save, sender=Article)
+async def async_handler(sender, instance, **kwargs):
+    await asyncio.sleep(0.1)
+    print("Async handler called")
+```
+
+From Django source, signals automatically handle mixed sync/async receivers:
+
+```python
+def send(self, sender, **named):
+    """Send signal from sender to all connected receivers."""
+    responses = []
+    sync_receivers, async_receivers = self._live_receivers(sender)
+    
+    # Execute sync receivers
+    for receiver in sync_receivers:
+        response = receiver(signal=self, sender=sender, **named)
+        responses.append((receiver, response))
+    
+    # Execute async receivers concurrently
+    if async_receivers:
+        async def asend():
+            async_responses = await _run_parallel(
+                *(receiver(signal=self, sender=sender, **named)
+                  for receiver in async_receivers)
+            )
+            return zip(async_receivers, async_responses)
+        responses.extend(async_to_sync(asend)())
+    
+    return responses
+```
+
+<Tip>
+Async receivers are executed concurrently using `asyncio.TaskGroup()` for better performance.
+</Tip>
+
+## Creating Custom Signals
+
+### Define Custom Signals
+
+```python
+# myapp/signals.py
+from django.dispatch import Signal
+
+# Define custom signals
+order_placed = Signal()
+order_shipped = Signal()
+payment_completed = Signal()
+
+# Signal with use_caching for better performance
+user_logged_in = Signal(use_caching=True)
+```
+
+### Send Custom Signals
+
+```python
+from myapp.signals import order_placed, payment_completed
+
+class Order:
+    def place_order(self):
+        # Process order
+        self.status = 'placed'
+        self.save()
+        
+        # Send signal
+        order_placed.send(
+            sender=self.__class__,
+            order=self,
+            user=self.user,
+            total=self.total
+        )
+
+    def complete_payment(self, payment_method):
+        # Process payment
+        payment_completed.send(
+            sender=self.__class__,
+            order=self,
+            payment_method=payment_method,
+            amount=self.total
+        )
+```
+
+### Connect to Custom Signals
+
+```python
+from django.dispatch import receiver
+from myapp.signals import order_placed, payment_completed
+
+@receiver(order_placed)
+def send_order_confirmation(sender, order, user, **kwargs):
+    send_email(
+        to=user.email,
+        subject=f"Order {order.id} Confirmed",
+        template='order_confirmation.html',
+        context={'order': order}
+    )
+
+@receiver(payment_completed)
+def update_inventory(sender, order, **kwargs):
+    for item in order.items.all():
+        item.product.decrease_stock(item.quantity)
+
+@receiver(payment_completed)
+async def async_payment_handler(sender, order, payment_method, amount, **kwargs):
+    # Async operations
+    await log_to_analytics(order, payment_method, amount)
+    await update_reporting_system(order)
+```
+
+## Signal Class Implementation
+
+From Django source (`django/dispatch/dispatcher.py`), the `Signal` class:
+
+```python
+class Signal:
+    """
+    Base class for all signals
+    
+    Internal attributes:
+        receivers: [
+            ((id(receiver), id(sender)), ref(receiver), ref(sender), is_async)
+        ]
+        sender_receivers_cache: WeakKeyDictionary[sender, list[receiver]]
+    """
+    
+    def __init__(self, use_caching=False):
+        """Create a new signal."""
+        self.receivers = []
+        self.lock = threading.Lock()
+        self.use_caching = use_caching
+        self.sender_receivers_cache = weakref.WeakKeyDictionary() if use_caching else {}
+        self._dead_receivers = False
+    
+    def connect(self, receiver, sender=None, weak=True, dispatch_uid=None):
+        """
+        Connect receiver to sender for signal.
+        
+        Arguments:
+            receiver: Function or instance method to receive signals (can be async)
+            sender: Specific sender to respond to (None = any sender)
+            weak: Use weak references to receiver (default True)
+            dispatch_uid: Unique identifier to prevent duplicate connections
+        """
+        # Implementation details...
+```
+
+## Sending Signals
+
+### Synchronous Send
+
+```python
+from myapp.signals import order_placed
+
+# Send to all receivers
+responses = order_placed.send(
+    sender=Order,
+    order=order_instance,
+    user=user_instance
+)
+
+# responses is a list of (receiver, response) tuples
+for receiver, response in responses:
+    print(f"{receiver.__name__} returned: {response}")
+```
+
+### Asynchronous Send
+
+```python
+async def process_order(order):
+    # Use asend() in async context
+    responses = await order_placed.asend(
+        sender=Order,
+        order=order,
+        user=order.user
+    )
+```
+
+### Robust Send
+
+Use `send_robust()` to catch exceptions from receivers:
+
+```python
+responses = order_placed.send_robust(
+    sender=Order,
+    order=order_instance
+)
+
+for receiver, response in responses:
+    if isinstance(response, Exception):
+        # Handle receiver error
+        logger.error(f"Receiver {receiver} failed: {response}")
+    else:
+        # Process successful response
+        print(f"Receiver {receiver} succeeded: {response}")
+```
+
+## Weak References
+
+By default, Django uses weak references for signal receivers:
+
+```python
+# Weak reference (default) - receiver may be garbage collected
+post_save.connect(my_handler, sender=Article, weak=True)
+
+# Strong reference - receiver won't be garbage collected
+post_save.connect(my_handler, sender=Article, weak=False)
+```
+
+<Warning>
+When connecting signals, use `weak=False` for lambda functions or local functions, as they may be garbage collected immediately.
+</Warning>
+
+## Dispatch UID
+
+Prevent duplicate signal connections using `dispatch_uid`:
+
+```python
+@receiver(post_save, sender=Article, dispatch_uid="article_saved_handler")
+def article_saved(sender, instance, **kwargs):
+    # This handler will only be connected once, even if
+    # the code is imported multiple times
+    pass
+```
+
+## Best Practices
+
+<Tip>
+1. **Always use `**kwargs`**: Ensures forward compatibility
+2. **Use dispatch_uid**: Prevents duplicate connections
+3. **Keep handlers lightweight**: Don't perform heavy operations
+4. **Use async handlers**: For I/O-bound operations
+5. **Handle exceptions**: Use `send_robust()` when needed
+6. **Register in AppConfig**: Connect signals in `apps.py` ready() method
+</Tip>
+
+## Registering Signals
+
+Register signals in your app's `AppConfig`:
+
+```python
+# myapp/apps.py
+from django.apps import AppConfig
+
+class MyAppConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'myapp'
+
+    def ready(self):
+        # Import signal handlers
+        import myapp.signals  # noqa
+```
+
+```python
+# myapp/signals.py
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from myapp.models import Article
+
+@receiver(post_save, sender=Article)
+def article_handler(sender, instance, **kwargs):
+    pass
+```
+
+## Common Patterns
+
+### Cache Invalidation
+
+```python
+@receiver([post_save, post_delete], sender=Article)
+def invalidate_article_cache(sender, instance, **kwargs):
+    from django.core.cache import cache
+    cache.delete(f'article_{instance.pk}')
+    cache.delete('article_list')
+```
+
+### Create Related Objects
+
+```python
+from django.contrib.auth.models import User
+from myapp.models import Profile
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
+```
+
+### Audit Logging
+
+```python
+@receiver(post_save)
+def log_model_changes(sender, instance, created, **kwargs):
+    action = 'created' if created else 'updated'
+    AuditLog.objects.create(
+        model_name=sender.__name__,
+        object_id=instance.pk,
+        action=action,
+        timestamp=timezone.now()
+    )
+```
+
+<Note>
+Signals are executed synchronously within the same database transaction as the operation that triggered them. If you need async processing, consider using Django's task system.
+</Note>

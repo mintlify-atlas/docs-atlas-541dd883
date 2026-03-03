@@ -1,0 +1,359 @@
+---
+title: Django Admin
+description: Automatic admin interface for managing Django models
+---
+
+The Django admin is a production-ready interface for managing your application's data. It reads metadata from your models to provide a quick, model-centric interface.
+
+## Installation
+
+Add to `INSTALLED_APPS` and configure URLs:
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',      # Required
+    'django.contrib.contenttypes',  # Required
+    'django.contrib.sessions',  # Required
+    'django.contrib.messages',  # Required
+    'django.contrib.staticfiles',
+]
+```
+
+```python urls.py
+from django.contrib import admin
+from django.urls import path
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+]
+```
+
+## ModelAdmin Class
+
+The `ModelAdmin` class is the representation of a model in the admin interface. It's defined in `django.contrib.admin.options`.
+
+### Basic Registration
+
+```python admin.py
+from django.contrib import admin
+from .models import Article
+
+# Simple registration
+admin.site.register(Article)
+
+# With ModelAdmin class
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    list_display = ['title', 'author', 'published_date', 'status']
+    list_filter = ['status', 'published_date', 'author']
+    search_fields = ['title', 'content']
+    prepopulated_fields = {'slug': ('title',)}
+    date_hierarchy = 'published_date'
+    ordering = ['-published_date']
+```
+
+### Common ModelAdmin Options
+
+<Note>
+These options are defined in `django.contrib.admin.options.ModelAdmin`.
+</Note>
+
+```python
+class ArticleAdmin(admin.ModelAdmin):
+    # List page options
+    list_display = ['title', 'author', 'status', 'view_count']
+    list_filter = ['status', 'published_date']
+    list_editable = ['status']  # Edit directly in list view
+    list_per_page = 50
+    list_select_related = ['author']  # Optimize queries
+    
+    # Search
+    search_fields = ['title', 'content', 'author__username']
+    search_help_text = 'Search by title, content, or author'
+    
+    # Form options
+    fields = ['title', 'slug', 'author', 'content', 'status']
+    readonly_fields = ['created_at', 'updated_at', 'view_count']
+    autocomplete_fields = ['author', 'tags']
+    
+    # Fieldsets for organization
+    fieldsets = [
+        ('Basic Information', {
+            'fields': ['title', 'slug', 'author']
+        }),
+        ('Content', {
+            'fields': ['content', 'excerpt']
+        }),
+        ('Metadata', {
+            'fields': ['status', 'published_date', 'tags'],
+            'classes': ['collapse']  # Collapsible section
+        }),
+    ]
+    
+    # Filtering
+    date_hierarchy = 'published_date'
+    ordering = ['-published_date']
+    
+    # Prepopulated fields
+    prepopulated_fields = {'slug': ('title',)}
+```
+
+## Custom Admin Actions
+
+Actions allow performing operations on multiple objects. Defined in `django.contrib.admin.options`:
+
+```python admin.py
+from django.contrib import admin, messages
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    list_display = ['title', 'status', 'published_date']
+    actions = ['make_published', 'make_draft']
+    
+    @admin.action(description='Mark selected articles as published')
+    def make_published(self, request, queryset):
+        updated = queryset.update(status='published')
+        self.message_user(
+            request,
+            f'{updated} article(s) marked as published.',
+            messages.SUCCESS
+        )
+    
+    @admin.action(description='Mark selected articles as draft')
+    def make_draft(self, request, queryset):
+        updated = queryset.update(status='draft')
+        self.message_user(
+            request,
+            f'{updated} article(s) marked as draft.',
+            messages.SUCCESS
+        )
+```
+
+## Custom List Display
+
+Customize how fields appear in the list view:
+
+```python admin.py
+from django.contrib import admin
+from django.utils.html import format_html
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    list_display = ['title', 'colored_status', 'author_name', 'word_count']
+    
+    @admin.display(description='Status', ordering='status')
+    def colored_status(self, obj):
+        colors = {
+            'draft': 'gray',
+            'published': 'green',
+            'archived': 'red',
+        }
+        color = colors.get(obj.status, 'black')
+        return format_html(
+            '<span style="color: {};">{}</span>',
+            color,
+            obj.get_status_display()
+        )
+    
+    @admin.display(description='Author', ordering='author__username')
+    def author_name(self, obj):
+        return obj.author.get_full_name() or obj.author.username
+    
+    @admin.display(description='Words')
+    def word_count(self, obj):
+        return len(obj.content.split())
+```
+
+## Inline Models
+
+Edit related objects on the same page:
+
+```python admin.py
+from django.contrib import admin
+
+class CommentInline(admin.TabularInline):
+    model = Comment
+    extra = 1  # Number of empty forms
+    fields = ['author', 'content', 'approved']
+    readonly_fields = ['created_at']
+
+class ImageInline(admin.StackedInline):
+    model = ArticleImage
+    extra = 0
+    fields = ['image', 'caption', 'order']
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    inlines = [ImageInline, CommentInline]
+```
+
+## AdminSite Customization
+
+Customize the admin site itself. From `django.contrib.admin.sites.AdminSite`:
+
+```python admin.py
+from django.contrib import admin
+
+# Customize the default site
+admin.site.site_header = 'My Site Administration'
+admin.site.site_title = 'My Site Admin'
+admin.site.index_title = 'Welcome to My Site Admin'
+admin.site.site_url = '/'
+admin.site.enable_nav_sidebar = True
+
+# Or create a custom AdminSite
+class MyAdminSite(admin.AdminSite):
+    site_header = 'Custom Admin'
+    site_title = 'Custom Admin Portal'
+    index_title = 'Dashboard'
+
+# Create instance
+custom_admin_site = MyAdminSite(name='custom_admin')
+
+# Register models to custom site
+custom_admin_site.register(Article, ArticleAdmin)
+```
+
+## Permissions
+
+Control access with permissions:
+
+```python admin.py
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        # Only staff can add articles
+        return request.user.is_staff
+    
+    def has_change_permission(self, request, obj=None):
+        # Users can only edit their own articles
+        if obj is not None and not request.user.is_superuser:
+            return obj.author == request.user
+        return True
+    
+    def has_delete_permission(self, request, obj=None):
+        # Only superusers can delete
+        return request.user.is_superuser
+    
+    def get_queryset(self, request):
+        # Users see only their own articles
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(author=request.user)
+```
+
+## Autocomplete Fields
+
+Use autocomplete for foreign keys and many-to-many fields:
+
+```python admin.py
+@admin.register(Author)
+class AuthorAdmin(admin.ModelAdmin):
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    search_fields = ['name']
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    autocomplete_fields = ['author', 'tags']
+```
+
+## List Filters
+
+Custom filters for the list page:
+
+```python admin.py
+from django.contrib import admin
+from django.utils import timezone
+from datetime import timedelta
+
+class PublishedFilter(admin.SimpleListFilter):
+    title = 'publication status'
+    parameter_name = 'published'
+    
+    def lookups(self, request, model_admin):
+        return [
+            ('published', 'Published'),
+            ('scheduled', 'Scheduled'),
+            ('past_week', 'Published in past week'),
+        ]
+    
+    def queryset(self, request, queryset):
+        now = timezone.now()
+        if self.value() == 'published':
+            return queryset.filter(
+                status='published',
+                published_date__lte=now
+            )
+        if self.value() == 'scheduled':
+            return queryset.filter(
+                status='published',
+                published_date__gt=now
+            )
+        if self.value() == 'past_week':
+            week_ago = now - timedelta(days=7)
+            return queryset.filter(
+                status='published',
+                published_date__gte=week_ago,
+                published_date__lte=now
+            )
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    list_filter = [PublishedFilter, 'status', 'author']
+```
+
+## Form Customization
+
+Customize the admin forms:
+
+```python admin.py
+from django import forms
+from django.contrib import admin
+
+class ArticleAdminForm(forms.ModelForm):
+    class Meta:
+        model = Article
+        fields = '__all__'
+        widgets = {
+            'content': forms.Textarea(attrs={'rows': 20, 'cols': 80}),
+        }
+    
+    def clean_title(self):
+        title = self.cleaned_data['title']
+        if len(title) < 10:
+            raise forms.ValidationError('Title must be at least 10 characters.')
+        return title
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    form = ArticleAdminForm
+```
+
+## Key Classes Reference
+
+### ModelAdmin
+
+Location: `django.contrib.admin.options.ModelAdmin`
+
+Main class for customizing admin interface for a model.
+
+### AdminSite
+
+Location: `django.contrib.admin.sites.AdminSite`
+
+Represents a Django admin site instance. The default instance is `admin.site`.
+
+### InlineModelAdmin
+
+Location: `django.contrib.admin.options.InlineModelAdmin`
+
+Base class for inline editing. Use `TabularInline` or `StackedInline` instead.
+
+<Note>
+The admin interface automatically creates a `LogEntry` (from `django.contrib.admin.models`) for all changes made through the admin.
+</Note>

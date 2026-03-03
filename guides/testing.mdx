@@ -1,0 +1,598 @@
+---
+title: Testing Guide
+description: Learn how to test Django applications effectively
+---
+
+# Testing Guide
+
+Django provides a comprehensive testing framework built on Python's `unittest` module. This guide covers unit tests, integration tests, and testing best practices.
+
+## Overview
+
+Django's testing framework provides:
+- **Test classes** - `TestCase`, `TransactionTestCase`, `SimpleTestCase`, `LiveServerTestCase`
+- **Test client** - Simulate requests without running a server
+- **Assertions** - Specialized assertions for Django apps
+- **Fixtures** - Test data management
+- **Coverage** - Code coverage analysis
+
+## Quick Start
+
+<Steps>
+  <Step title="Create Test File">
+    Add tests in `tests.py` or a `tests/` module:
+    
+    ```python tests.py
+    from django.test import TestCase
+    from .models import Article
+    
+    class ArticleTestCase(TestCase):
+        def setUp(self):
+            Article.objects.create(title="Test Article", content="Test content")
+        
+        def test_article_creation(self):
+            article = Article.objects.get(title="Test Article")
+            self.assertEqual(article.content, "Test content")
+    ```
+  </Step>
+  
+  <Step title="Run Tests">
+    Execute tests with the management command:
+    
+    ```bash
+    # Run all tests
+    python manage.py test
+    
+    # Run specific app
+    python manage.py test myapp
+    
+    # Run specific test class
+    python manage.py test myapp.tests.ArticleTestCase
+    
+    # Run specific test method
+    python manage.py test myapp.tests.ArticleTestCase.test_article_creation
+    ```
+  </Step>
+</Steps>
+
+## Test Classes
+
+### SimpleTestCase
+
+For tests that don't require database access:
+
+```python
+from django.test import SimpleTestCase
+from myapp.utils import slugify_text
+
+class UtilsTestCase(SimpleTestCase):
+    def test_slugify(self):
+        result = slugify_text("Hello World!")
+        self.assertEqual(result, "hello-world")
+    
+    def test_empty_string(self):
+        result = slugify_text("")
+        self.assertEqual(result, "")
+```
+
+<Note>
+  `SimpleTestCase` runs faster than `TestCase` because it doesn't set up or tear down the database.
+</Note>
+
+### TestCase
+
+For tests that require database access:
+
+```python
+from django.test import TestCase
+from django.contrib.auth.models import User
+from .models import Article
+
+class ArticleModelTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        """Set up data for the whole TestCase"""
+        cls.user = User.objects.create_user(
+            username='testuser',
+            password='testpass123'
+        )
+        cls.article = Article.objects.create(
+            title='Test Article',
+            content='Test content',
+            author=cls.user
+        )
+    
+    def test_article_title(self):
+        self.assertEqual(self.article.title, 'Test Article')
+    
+    def test_article_str(self):
+        self.assertEqual(str(self.article), 'Test Article')
+    
+    def test_article_author(self):
+        self.assertEqual(self.article.author, self.user)
+```
+
+### TransactionTestCase
+
+For tests that need to test transaction behavior:
+
+```python
+from django.test import TransactionTestCase
+from django.db import transaction
+from .models import Account
+
+class TransactionTestCase(TransactionTestCase):
+    def test_atomic_transaction(self):
+        account = Account.objects.create(balance=100)
+        
+        try:
+            with transaction.atomic():
+                account.balance -= 50
+                account.save()
+                
+                # Force error
+                raise Exception("Rollback!")
+        except Exception:
+            pass
+        
+        # Balance should be unchanged
+        account.refresh_from_db()
+        self.assertEqual(account.balance, 100)
+```
+
+### LiveServerTestCase
+
+For Selenium and browser testing:
+
+```python
+from django.test import LiveServerTestCase
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+
+class SeleniumTestCase(LiveServerTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.selenium = webdriver.Chrome()
+        cls.selenium.implicitly_wait(10)
+    
+    @classmethod
+    def tearDownClass(cls):
+        cls.selenium.quit()
+        super().tearDownClass()
+    
+    def test_login(self):
+        self.selenium.get(f'{self.live_server_url}/login/')
+        
+        username_input = self.selenium.find_element(By.NAME, 'username')
+        username_input.send_keys('testuser')
+        
+        password_input = self.selenium.find_element(By.NAME, 'password')
+        password_input.send_keys('testpass')
+        
+        self.selenium.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
+        
+        self.assertIn('Dashboard', self.selenium.title)
+```
+
+## Test Client
+
+### Making Requests
+
+```python
+from django.test import TestCase, Client
+
+class ViewTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+    
+    def test_homepage(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+    
+    def test_post_request(self):
+        response = self.client.post('/contact/', {
+            'name': 'John Doe',
+            'email': 'john@example.com',
+            'message': 'Test message'
+        })
+        self.assertEqual(response.status_code, 302)  # Redirect after success
+    
+    def test_ajax_request(self):
+        response = self.client.get(
+            '/api/data/',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/json')
+```
+
+### Authentication
+
+```python
+def test_authenticated_view(self):
+    # Create user
+    user = User.objects.create_user(
+        username='testuser',
+        password='testpass123'
+    )
+    
+    # Login
+    self.client.login(username='testuser', password='testpass123')
+    
+    # Access protected view
+    response = self.client.get('/dashboard/')
+    self.assertEqual(response.status_code, 200)
+    
+    # Logout
+    self.client.logout()
+    
+    # Should redirect to login
+    response = self.client.get('/dashboard/')
+    self.assertEqual(response.status_code, 302)
+
+def test_force_login(self):
+    # Skip password hashing (faster)
+    user = User.objects.create_user(username='testuser')
+    self.client.force_login(user)
+    
+    response = self.client.get('/dashboard/')
+    self.assertEqual(response.status_code, 200)
+```
+
+## Assertions
+
+### Response Assertions
+
+```python
+def test_response_assertions(self):
+    response = self.client.get('/')
+    
+    # Status code
+    self.assertEqual(response.status_code, 200)
+    
+    # Contains text
+    self.assertContains(response, 'Welcome')
+    self.assertNotContains(response, 'Error')
+    
+    # Contains text with count
+    self.assertContains(response, 'Article', count=5)
+    
+    # Template used
+    self.assertTemplateUsed(response, 'home.html')
+    self.assertTemplateNotUsed(response, 'error.html')
+    
+    # Redirect
+    response = self.client.post('/login/', {'username': 'test', 'password': 'test'})
+    self.assertRedirects(response, '/dashboard/')
+```
+
+### Database Assertions
+
+```python
+def test_database_assertions(self):
+    # Query count
+    with self.assertNumQueries(2):
+        list(Article.objects.all())
+        list(User.objects.all())
+    
+    # Object exists
+    Article.objects.create(title='Test')
+    self.assertTrue(Article.objects.filter(title='Test').exists())
+    
+    # Count
+    self.assertEqual(Article.objects.count(), 1)
+```
+
+### Form Assertions
+
+```python
+def test_form_validation(self):
+    form_data = {'title': '', 'content': 'Test'}
+    response = self.client.post('/articles/create/', form_data)
+    
+    # Check form errors
+    self.assertFormError(response, 'form', 'title', 'This field is required.')
+```
+
+### HTML Assertions
+
+```python
+def test_html_assertions(self):
+    html1 = '<div><p>Hello</p></div>'
+    html2 = '<div>  <p>Hello</p>  </div>'
+    
+    # Ignores whitespace differences
+    self.assertHTMLEqual(html1, html2)
+    
+    # Check element in HTML
+    response = self.client.get('/')
+    self.assertInHTML('<h1>Welcome</h1>', response.content.decode())
+```
+
+### JSON Assertions
+
+```python
+def test_json_response(self):
+    response = self.client.get('/api/articles/')
+    
+    self.assertEqual(response['Content-Type'], 'application/json')
+    
+    data = response.json()
+    self.assertEqual(len(data), 10)
+    self.assertIn('title', data[0])
+    
+    # Compare JSON
+    expected = {'status': 'success', 'count': 10}
+    self.assertJSONEqual(response.content, expected)
+```
+
+## Fixtures
+
+### Using Fixtures
+
+```python
+class ArticleTestCase(TestCase):
+    fixtures = ['articles.json', 'users.json']
+    
+    def test_article_from_fixture(self):
+        article = Article.objects.get(pk=1)
+        self.assertEqual(article.title, 'First Article')
+```
+
+### Creating Fixtures
+
+```bash
+# Export data as fixture
+python manage.py dumpdata myapp.Article --indent 2 > fixtures/articles.json
+
+# Export all data
+python manage.py dumpdata --indent 2 > fixtures/all_data.json
+
+# Load fixtures
+python manage.py loaddata articles.json
+```
+
+## Mocking
+
+### Mock External APIs
+
+```python
+from unittest.mock import patch, Mock
+from django.test import TestCase
+
+class APITestCase(TestCase):
+    @patch('myapp.views.requests.get')
+    def test_external_api(self, mock_get):
+        # Configure mock
+        mock_response = Mock()
+        mock_response.json.return_value = {'data': 'test'}
+        mock_response.status_code = 200
+        mock_get.return_value = mock_response
+        
+        # Test code that calls requests.get
+        response = self.client.get('/fetch-data/')
+        
+        self.assertEqual(response.status_code, 200)
+        mock_get.assert_called_once()
+```
+
+### Mock Time
+
+```python
+from django.test import TestCase
+from unittest.mock import patch
+from datetime import datetime
+
+class TimeTestCase(TestCase):
+    @patch('django.utils.timezone.now')
+    def test_time_dependent_code(self, mock_now):
+        mock_now.return_value = datetime(2024, 1, 1, 12, 0, 0)
+        
+        # Test code that depends on current time
+        response = self.client.get('/current-time/')
+        self.assertContains(response, '2024-01-01')
+```
+
+## Async Tests
+
+```python
+from django.test import TestCase
+import asyncio
+
+class AsyncTestCase(TestCase):
+    async def test_async_function(self):
+        result = await my_async_function()
+        self.assertEqual(result, 'expected')
+    
+    def test_async_view(self):
+        response = self.client.get('/async-view/')
+        self.assertEqual(response.status_code, 200)
+```
+
+## Test Organization
+
+### Structure Tests in Modules
+
+```
+myapp/
+├── tests/
+│   ├── __init__.py
+│   ├── test_models.py
+│   ├── test_views.py
+│   ├── test_forms.py
+│   └── test_utils.py
+```
+
+```python tests/__init__.py
+# Import all test classes
+from .test_models import *
+from .test_views import *
+from .test_forms import *
+from .test_utils import *
+```
+
+### Use Test Tags
+
+```python
+from django.test import TestCase, tag
+
+@tag('fast')
+class FastTestCase(TestCase):
+    def test_something(self):
+        pass
+
+@tag('slow', 'integration')
+class SlowTestCase(TestCase):
+    def test_integration(self):
+        pass
+```
+
+```bash
+# Run specific tags
+python manage.py test --tag=fast
+python manage.py test --exclude-tag=slow
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use setUpTestData for Shared Data">
+    Create data once per test class:
+    
+    ```python
+    class MyTestCase(TestCase):
+        @classmethod
+        def setUpTestData(cls):
+            # Created once for entire class
+            cls.user = User.objects.create_user('test')
+        
+        def setUp(self):
+            # Called before each test method
+            self.client.login(username='test')
+    ```
+  </Step>
+  
+  <Step title="Keep Tests Independent">
+    Each test should be isolated:
+    
+    ```python
+    # Good - independent
+    def test_create_article(self):
+        article = Article.objects.create(title='Test')
+        self.assertEqual(Article.objects.count(), 1)
+    
+    # Bad - depends on other tests
+    def test_article_count(self):
+        self.assertEqual(Article.objects.count(), 1)  # Brittle!
+    ```
+  </Step>
+  
+  <Step title="Test Edge Cases">
+    Don't just test the happy path:
+    
+    ```python
+    def test_empty_input(self):
+        form = ContactForm(data={'message': ''})
+        self.assertFalse(form.is_valid())
+    
+    def test_max_length(self):
+        long_text = 'x' * 1000
+        form = ContactForm(data={'message': long_text})
+        self.assertFalse(form.is_valid())
+    ```
+  </Step>
+  
+  <Step title="Use Coverage Tools">
+    Measure test coverage:
+    
+    ```bash
+    pip install coverage
+    
+    coverage run --source='.' manage.py test
+    coverage report
+    coverage html  # Generate HTML report
+    ```
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Testing Emails
+
+```python
+from django.core import mail
+from django.test import TestCase
+
+class EmailTestCase(TestCase):
+    def test_welcome_email(self):
+        # Clear outbox
+        mail.outbox = []
+        
+        # Trigger email
+        response = self.client.post('/register/', {
+            'username': 'newuser',
+            'email': 'user@example.com',
+            'password': 'testpass123'
+        })
+        
+        # Check email was sent
+        self.assertEqual(len(mail.outbox), 1)
+        
+        # Check email content
+        email = mail.outbox[0]
+        self.assertEqual(email.subject, 'Welcome!')
+        self.assertEqual(email.to, ['user@example.com'])
+        self.assertIn('activate', email.body)
+```
+
+### Testing File Uploads
+
+```python
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
+
+class FileUploadTestCase(TestCase):
+    def test_image_upload(self):
+        # Create test file
+        test_file = SimpleUploadedFile(
+            'test.jpg',
+            b'file content',
+            content_type='image/jpeg'
+        )
+        
+        response = self.client.post('/upload/', {
+            'image': test_file
+        })
+        
+        self.assertEqual(response.status_code, 302)
+```
+
+### Testing Permissions
+
+```python
+def test_permission_required(self):
+    # Create users
+    regular_user = User.objects.create_user('regular', password='test')
+    admin_user = User.objects.create_user('admin', password='test', is_staff=True)
+    
+    # Regular user denied
+    self.client.force_login(regular_user)
+    response = self.client.get('/admin-only/')
+    self.assertEqual(response.status_code, 403)
+    
+    # Admin user allowed
+    self.client.force_login(admin_user)
+    response = self.client.get('/admin-only/')
+    self.assertEqual(response.status_code, 200)
+```
+
+<Warning>
+  Test databases are destroyed after tests complete. Never run tests against production databases.
+</Warning>
+
+## Related Resources
+
+- [Testing Tools Reference](/api-reference/test/tools)
+- [Test Client API](/api-reference/test/client)
+- [Coverage Configuration](/guides/test-coverage)

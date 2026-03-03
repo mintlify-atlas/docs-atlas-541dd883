@@ -1,0 +1,522 @@
+---
+title: File Uploads Guide
+description: Learn how to handle file uploads in Django
+---
+
+# File Uploads Guide
+
+Django provides a robust file upload system that handles file validation, storage, and serving. This guide covers everything from basic uploads to advanced storage backends.
+
+## Overview
+
+Django processes uploaded files through:
+1. **File upload handlers** - Parse multipart form data
+2. **Form fields** - Validate uploaded files
+3. **Model fields** - Store file references
+4. **Storage backends** - Save files to disk or cloud storage
+
+## Basic File Upload
+
+<Steps>
+  <Step title="Create the Form">
+    Use `FileField` or `ImageField` in your form:
+    
+    ```python forms.py
+    from django import forms
+    
+    class UploadFileForm(forms.Form):
+        title = forms.CharField(max_length=50)
+        file = forms.FileField()
+    ```
+  </Step>
+  
+  <Step title="Create the View">
+    Handle the upload in your view:
+    
+    ```python views.py
+    from django.shortcuts import render
+    from .forms import UploadFileForm
+    
+    def upload_file(request):
+        if request.method == 'POST':
+            form = UploadFileForm(request.POST, request.FILES)
+            if form.is_valid():
+                uploaded_file = request.FILES['file']
+                # Access file properties
+                print(f"Name: {uploaded_file.name}")
+                print(f"Size: {uploaded_file.size} bytes")
+                print(f"Content type: {uploaded_file.content_type}")
+                
+                # Process the file
+                handle_uploaded_file(uploaded_file)
+                return redirect('success')
+        else:
+            form = UploadFileForm()
+        return render(request, 'upload.html', {'form': form})
+    
+    def handle_uploaded_file(f):
+        # Save file to disk
+        with open(f'uploads/{f.name}', 'wb+') as destination:
+            for chunk in f.chunks():
+                destination.write(chunk)
+    ```
+  </Step>
+  
+  <Step title="Create the Template">
+    Add the form to your template:
+    
+    ```django upload.html
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Upload</button>
+    </form>
+    ```
+    
+    <Warning>
+      Always include `enctype="multipart/form-data"` in forms that upload files.
+    </Warning>
+  </Step>
+</Steps>
+
+## Model-Based Uploads
+
+The recommended approach is using model fields:
+
+```python models.py
+from django.db import models
+
+class Document(models.Model):
+    title = models.CharField(max_length=200)
+    upload = models.FileField(upload_to='documents/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.title
+
+class Photo(models.Model):
+    title = models.CharField(max_length=200)
+    image = models.ImageField(
+        upload_to='photos/%Y/%m/%d/',  # Organized by date
+        height_field='height',
+        width_field='width'
+    )
+    height = models.IntegerField(null=True, blank=True)
+    width = models.IntegerField(null=True, blank=True)
+```
+
+### Using ModelForm
+
+```python forms.py
+from django import forms
+from .models import Document
+
+class DocumentForm(forms.ModelForm):
+    class Meta:
+        model = Document
+        fields = ['title', 'upload']
+```
+
+```python views.py
+from django.shortcuts import render, redirect
+from .forms import DocumentForm
+
+def upload_document(request):
+    if request.method == 'POST':
+        form = DocumentForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()  # File is automatically saved
+            return redirect('document_list')
+    else:
+        form = DocumentForm()
+    return render(request, 'upload_document.html', {'form': form})
+```
+
+## Uploaded File Objects
+
+Django provides different file classes based on upload size:
+
+### InMemoryUploadedFile
+
+Small files (< 2.5MB by default) are stored in memory:
+
+```python
+from django.core.files.uploadedfile import InMemoryUploadedFile
+
+# Properties
+uploaded_file.name          # Original filename
+uploaded_file.size          # Size in bytes
+uploaded_file.content_type  # MIME type
+uploaded_file.charset       # Character encoding
+uploaded_file.read()        # Read entire content
+uploaded_file.chunks()      # Iterate in chunks
+```
+
+### TemporaryUploadedFile
+
+Large files are written to temporary disk storage:
+
+```python
+from django.core.files.uploadedfile import TemporaryUploadedFile
+
+# Additional method
+uploaded_file.temporary_file_path()  # Get temp file path
+```
+
+<Note>
+  Configure upload thresholds in settings:
+  
+  ```python settings.py
+  FILE_UPLOAD_MAX_MEMORY_SIZE = 2621440  # 2.5 MB
+  DATA_UPLOAD_MAX_MEMORY_SIZE = 2621440  # 2.5 MB
+  ```
+</Note>
+
+## File Storage
+
+Django's storage system abstracts file operations:
+
+### Default File System Storage
+
+```python settings.py
+MEDIA_ROOT = '/path/to/media/'
+MEDIA_URL = '/media/'
+```
+
+```python urls.py
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    # ... your patterns ...
+]
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+
+### Using Storage Directly
+
+```python
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+
+# Save file
+path = default_storage.save('documents/file.txt', ContentFile(b'File content'))
+
+# Check if exists
+if default_storage.exists('documents/file.txt'):
+    # Read file
+    with default_storage.open('documents/file.txt', 'r') as f:
+        content = f.read()
+    
+    # Get file size
+    size = default_storage.size('documents/file.txt')
+    
+    # Get URL
+    url = default_storage.url('documents/file.txt')
+    
+    # Delete file
+    default_storage.delete('documents/file.txt')
+```
+
+## Custom Upload Paths
+
+Dynamically determine upload paths:
+
+```python models.py
+import os
+from django.utils import timezone
+
+def user_directory_path(instance, filename):
+    """Upload to MEDIA_ROOT/user_<id>/<filename>"""
+    return f'user_{instance.user.id}/{filename}'
+
+def dated_upload_path(instance, filename):
+    """Organize by date"""
+    now = timezone.now()
+    return f'uploads/{now.year}/{now.month:02d}/{filename}'
+
+def hashed_upload_path(instance, filename):
+    """Use hash to avoid conflicts"""
+    ext = os.path.splitext(filename)[1]
+    import hashlib
+    hash_name = hashlib.md5(filename.encode()).hexdigest()
+    return f'uploads/{hash_name}{ext}'
+
+class UserDocument(models.Model):
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
+    document = models.FileField(upload_to=user_directory_path)
+```
+
+## File Validation
+
+### Size Validation
+
+```python forms.py
+from django import forms
+from django.core.exceptions import ValidationError
+
+class UploadFileForm(forms.Form):
+    file = forms.FileField()
+    
+    def clean_file(self):
+        file = self.cleaned_data['file']
+        
+        # Check file size (10MB max)
+        if file.size > 10 * 1024 * 1024:
+            raise ValidationError('File size cannot exceed 10MB')
+        
+        return file
+```
+
+### Content Type Validation
+
+```python forms.py
+from django import forms
+from django.core.exceptions import ValidationError
+
+class ImageUploadForm(forms.Form):
+    image = forms.ImageField()
+    
+    def clean_image(self):
+        image = self.cleaned_data['image']
+        
+        # Allowed content types
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif']
+        if image.content_type not in allowed_types:
+            raise ValidationError(
+                f'Invalid file type. Allowed: {', '.join(allowed_types)}'
+            )
+        
+        return image
+```
+
+### File Extension Validation
+
+```python validators.py
+from django.core.exceptions import ValidationError
+import os
+
+def validate_file_extension(value):
+    ext = os.path.splitext(value.name)[1]
+    valid_extensions = ['.pdf', '.doc', '.docx']
+    if ext.lower() not in valid_extensions:
+        raise ValidationError('Unsupported file extension.')
+```
+
+```python models.py
+from .validators import validate_file_extension
+
+class Document(models.Model):
+    file = models.FileField(
+        upload_to='documents/',
+        validators=[validate_file_extension]
+    )
+```
+
+## Image Processing
+
+For `ImageField`, Django validates that uploaded files are valid images:
+
+```python models.py
+from django.db import models
+from PIL import Image
+from io import BytesIO
+from django.core.files.uploadedfile import InMemoryUploadedFile
+
+class Photo(models.Model):
+    image = models.ImageField(upload_to='photos/')
+    thumbnail = models.ImageField(upload_to='thumbnails/', blank=True)
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+        # Create thumbnail
+        if self.image:
+            img = Image.open(self.image.path)
+            img.thumbnail((200, 200))
+            
+            thumb_io = BytesIO()
+            img.save(thumb_io, format='JPEG')
+            
+            self.thumbnail.save(
+                f'thumb_{self.image.name}',
+                InMemoryUploadedFile(
+                    thumb_io, None, f'thumb_{self.image.name}',
+                    'image/jpeg', thumb_io.tell(), None
+                ),
+                save=False
+            )
+            super().save(update_fields=['thumbnail'])
+```
+
+<Note>
+  Using `ImageField` requires Pillow:
+  
+  ```bash
+  pip install Pillow
+  ```
+</Note>
+
+## Multiple File Uploads
+
+```python forms.py
+from django import forms
+
+class MultipleFileForm(forms.Form):
+    files = forms.FileField(
+        widget=forms.ClearableFileInput(attrs={'multiple': True})
+    )
+```
+
+```python views.py
+def upload_multiple_files(request):
+    if request.method == 'POST':
+        form = MultipleFileForm(request.POST, request.FILES)
+        if form.is_valid():
+            files = request.FILES.getlist('files')
+            for f in files:
+                # Process each file
+                handle_uploaded_file(f)
+            return redirect('success')
+    else:
+        form = MultipleFileForm()
+    return render(request, 'upload.html', {'form': form})
+```
+
+## Testing File Uploads
+
+```python tests.py
+from django.test import TestCase, Client
+from django.core.files.uploadedfile import SimpleUploadedFile
+from .models import Document
+
+class FileUploadTestCase(TestCase):
+    def test_file_upload(self):
+        # Create test file
+        test_file = SimpleUploadedFile(
+            'test.txt',
+            b'File content',
+            content_type='text/plain'
+        )
+        
+        # Upload via POST
+        response = self.client.post('/upload/', {
+            'title': 'Test Document',
+            'file': test_file
+        })
+        
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Document.objects.filter(title='Test Document').exists())
+    
+    def test_image_upload(self):
+        # Create test image
+        from PIL import Image
+        from io import BytesIO
+        
+        image = Image.new('RGB', (100, 100), color='red')
+        image_io = BytesIO()
+        image.save(image_io, format='JPEG')
+        image_io.seek(0)
+        
+        test_image = SimpleUploadedFile(
+            'test.jpg',
+            image_io.read(),
+            content_type='image/jpeg'
+        )
+        
+        response = self.client.post('/upload/image/', {'image': test_image})
+        self.assertEqual(response.status_code, 302)
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Validate All Uploads">
+    Always validate file type, size, and content:
+    
+    ```python
+    def clean_file(self):
+        file = self.cleaned_data['file']
+        
+        # Validate size
+        if file.size > 10 * 1024 * 1024:
+            raise ValidationError('File too large')
+        
+        # Validate type
+        if not file.content_type.startswith('image/'):
+            raise ValidationError('Only images allowed')
+        
+        return file
+    ```
+  </Step>
+  
+  <Step title="Use Unique Filenames">
+    Prevent filename conflicts:
+    
+    ```python
+    import uuid
+    
+    def unique_filename(instance, filename):
+        ext = filename.split('.')[-1]
+        filename = f'{uuid.uuid4().hex}.{ext}'
+        return f'uploads/{filename}'
+    ```
+  </Step>
+  
+  <Step title="Set Upload Limits">
+    Configure maximum upload sizes in settings:
+    
+    ```python settings.py
+    # Maximum upload size (10MB)
+    FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760
+    DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760
+    ```
+  </Step>
+  
+  <Step title="Scan for Malware">
+    In production, scan uploaded files for malware before saving.
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Accessing Uploaded Files
+
+```python
+# In views
+document = Document.objects.get(id=1)
+
+# File path
+print(document.upload.path)  # Full filesystem path
+
+# File URL
+print(document.upload.url)  # URL to serve file
+
+# File name
+print(document.upload.name)  # Relative path from MEDIA_ROOT
+
+# File size
+print(document.upload.size)  # Size in bytes
+```
+
+### Deleting Files
+
+```python
+# Delete model instance and file
+document = Document.objects.get(id=1)
+document.upload.delete(save=False)  # Delete file from storage
+document.delete()  # Delete database record
+```
+
+<Warning>
+  Deleting a model instance does NOT automatically delete the associated file. Use signals or override `delete()` method.
+</Warning>
+
+## Related Resources
+
+- [File Storage API Reference](/api-reference/files/storage)
+- [File Upload Settings](/configuration/files)
+- [Custom Storage Backends](/guides/custom-storage)

@@ -1,0 +1,522 @@
+---
+title: Internationalization Guide
+description: Learn how to make Django applications multilingual
+---
+
+# Internationalization Guide
+
+Django provides comprehensive internationalization (i18n) and localization (l10n) support. This guide shows you how to make your application available in multiple languages.
+
+## Overview
+
+Django's i18n framework enables:
+- **Translation** - Mark strings for translation in Python and templates
+- **Localization** - Format dates, times, numbers for different locales
+- **Language selection** - Automatic and manual language switching
+- **Time zones** - Timezone-aware datetime handling
+
+## Quick Start
+
+<Steps>
+  <Step title="Enable Internationalization">
+    Configure i18n in `settings.py`:
+    
+    ```python settings.py
+    USE_I18N = True
+    USE_L10N = True
+    USE_TZ = True
+    
+    LANGUAGE_CODE = 'en-us'
+    TIME_ZONE = 'UTC'
+    
+    LANGUAGES = [
+        ('en', 'English'),
+        ('es', 'Spanish'),
+        ('fr', 'French'),
+        ('de', 'German'),
+    ]
+    
+    LOCALE_PATHS = [
+        BASE_DIR / 'locale',
+    ]
+    ```
+  </Step>
+  
+  <Step title="Mark Strings for Translation">
+    Use translation functions in Python:
+    
+    ```python views.py
+    from django.utils.translation import gettext as _
+    
+    def my_view(request):
+        message = _("Welcome to our site!")
+        return render(request, 'template.html', {'message': message})
+    ```
+    
+    Use translation tags in templates:
+    
+    ```django template.html
+    {% load i18n %}
+    
+    <h1>{% trans "Welcome to our site!" %}</h1>
+    
+    {% blocktrans %}
+    Hello {{ user_name }}!
+    {% endblocktrans %}
+    ```
+  </Step>
+  
+  <Step title="Create Translation Files">
+    Generate message files for each language:
+    
+    ```bash
+    # Create locale directories
+    python manage.py makemessages -l es
+    python manage.py makemessages -l fr
+    python manage.py makemessages -l de
+    ```
+    
+    This creates `.po` files in `locale/<lang>/LC_MESSAGES/django.po`
+  </Step>
+  
+  <Step title="Translate Strings">
+    Edit the `.po` files:
+    
+    ```po locale/es/LC_MESSAGES/django.po
+    msgid "Welcome to our site!"
+    msgstr "¡Bienvenido a nuestro sitio!"
+    
+    msgid "Hello %(user_name)s!"
+    msgstr "¡Hola %(user_name)s!"
+    ```
+  </Step>
+  
+  <Step title="Compile Translations">
+    Compile `.po` files to binary `.mo` files:
+    
+    ```bash
+    python manage.py compilemessages
+    ```
+  </Step>
+</Steps>
+
+## Translation in Python
+
+### Basic Translation
+
+```python
+from django.utils.translation import gettext as _
+
+# Simple translation
+message = _("Hello, World!")
+
+# Translation with variables
+from django.utils.translation import gettext
+message = gettext("Hello, %(name)s!") % {'name': 'John'}
+```
+
+### Lazy Translation
+
+For module-level strings and model fields:
+
+```python
+from django.utils.translation import gettext_lazy as _
+
+# Use in model fields
+class Article(models.Model):
+    title = models.CharField(_('title'), max_length=200)
+    content = models.TextField(_('content'))
+    
+    class Meta:
+        verbose_name = _('article')
+        verbose_name_plural = _('articles')
+
+# Use in form fields
+class ContactForm(forms.Form):
+    name = forms.CharField(label=_('Your name'))
+    email = forms.EmailField(label=_('Your email'))
+    message = forms.CharField(label=_('Message'), widget=forms.Textarea)
+```
+
+<Note>
+  Use `gettext_lazy()` for strings evaluated at module load time. Use `gettext()` for strings evaluated at runtime.
+</Note>
+
+### Pluralization
+
+```python
+from django.utils.translation import ngettext
+
+def item_count_message(count):
+    return ngettext(
+        'You have %(count)d item.',
+        'You have %(count)d items.',
+        count
+    ) % {'count': count}
+
+# Usage
+item_count_message(1)   # "You have 1 item."
+item_count_message(5)   # "You have 5 items."
+```
+
+### Contextual Translation
+
+For words with multiple meanings:
+
+```python
+from django.utils.translation import pgettext
+
+# "May" as a month
+month = pgettext("month name", "May")
+
+# "May" as auxiliary verb
+verb = pgettext("verb", "May")
+```
+
+## Translation in Templates
+
+### Basic Template Tags
+
+```django
+{% load i18n %}
+
+{# Simple translation #}
+<h1>{% trans "Welcome!" %}</h1>
+
+{# Translation with context #}
+<p>{% trans "May" context "month name" %}</p>
+
+{# Translation with variables #}
+{% blocktrans with name=user.name %}
+Hello {{ name }}!
+{% endblocktrans %}
+
+{# Pluralization #}
+{% blocktrans count counter=items|length %}
+You have {{ counter }} item.
+{% plural %}
+You have {{ counter }} items.
+{% endblocktrans %}
+```
+
+### Trimming Whitespace
+
+```django
+{% blocktrans trimmed %}
+    This string will have
+    all whitespace normalized.
+{% endblocktrans %}
+```
+
+### Translation Comments
+
+Provide context for translators:
+
+```django
+{# Translators: This message appears on the login page #}
+{% trans "Please enter your credentials" %}
+
+{% comment %}Translators: User name in profile section{% endcomment %}
+{% trans "Name" %}
+```
+
+## Language Selection
+
+### URL Patterns
+
+Add language prefix to URLs:
+
+```python urls.py
+from django.conf.urls.i18n import i18n_patterns
+from django.urls import path
+
+urlpatterns = [
+    path('about/', about_view),
+]
+
+# Add language prefix
+urlpatterns += i18n_patterns(
+    path('', home_view, name='home'),
+    path('blog/', blog_view, name='blog'),
+)
+
+# URLs will be: /en/blog/, /es/blog/, /fr/blog/
+```
+
+### Language Switcher
+
+```python views.py
+from django.utils.translation import activate
+from django.shortcuts import redirect
+
+def set_language(request, language):
+    activate(language)
+    response = redirect(request.GET.get('next', '/'))
+    response.set_cookie('django_language', language)
+    return response
+```
+
+```django template.html
+{% load i18n %}
+
+<form action="{% url 'set_language' %}" method="post">
+    {% csrf_token %}
+    <input name="next" type="hidden" value="{{ request.path }}">
+    <select name="language" onchange="this.form.submit()">
+        {% get_current_language as LANGUAGE_CODE %}
+        {% get_available_languages as LANGUAGES %}
+        {% for lang_code, lang_name in LANGUAGES %}
+            <option value="{{ lang_code }}"
+                    {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>
+                {{ lang_name }}
+            </option>
+        {% endfor %}
+    </select>
+</form>
+```
+
+### Middleware Configuration
+
+```python settings.py
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',  # Add this
+    'django.middleware.common.CommonMiddleware',
+    # ... other middleware ...
+]
+```
+
+### Language Detection Order
+
+Django determines the language in this order:
+
+1. Language prefix in URL (`/fr/about/`)
+2. Session key `django_language`
+3. Cookie named `django_language`
+4. `Accept-Language` HTTP header
+5. `LANGUAGE_CODE` setting
+
+## Manual Translation
+
+### Override Language
+
+```python
+from django.utils.translation import activate, get_language
+
+# Save current language
+current_lang = get_language()
+
+# Switch to Spanish
+activate('es')
+print(_("Hello"))  # "Hola"
+
+# Restore original language
+activate(current_lang)
+```
+
+### Context Manager
+
+```python
+from django.utils.translation import override
+
+with override('fr'):
+    print(_("Hello"))  # "Bonjour"
+
+# Back to original language
+print(_("Hello"))  # "Hello" (if English)
+```
+
+## Localization
+
+### Date and Time Formatting
+
+```python
+from django.utils import formats
+import datetime
+
+today = datetime.date.today()
+
+# Format date according to locale
+formatted = formats.date_format(today, "SHORT_DATE_FORMAT")
+
+# Template
+{% load l10n %}
+{{ today|localize }}
+{{ value|unlocalize }}  {# Display in raw format #}
+```
+
+### Number Formatting
+
+```python
+from django.utils.formats import number_format
+
+value = 1234.5678
+
+# Format number
+formatted = number_format(value, decimal_pos=2)
+# US: "1,234.57"
+# Germany: "1.234,57"
+# France: "1 234,57"
+```
+
+### Template Filters
+
+```django
+{% load l10n %}
+
+{# Localize numbers and dates #}
+{{ value|localize }}
+
+{# Don't localize #}
+{{ value|unlocalize }}
+```
+
+## JavaScript Integration
+
+### JavaScript Catalog
+
+```python urls.py
+from django.views.i18n import JavaScriptCatalog
+
+urlpatterns = [
+    path('jsi18n/', JavaScriptCatalog.as_view(), name='javascript-catalog'),
+]
+```
+
+```django template.html
+<script src="{% url 'javascript-catalog' %}"></script>
+<script>
+    // Use Django translations in JavaScript
+    console.log(gettext('Hello'));
+    console.log(ngettext('item', 'items', 5));
+    console.log(interpolate(gettext('Hello %s'), ['World']));
+</script>
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Translation Functions Consistently">
+    Always mark user-facing strings:
+    
+    ```python
+    # Good
+    error_message = _("Invalid email address")
+    
+    # Bad - not translatable
+    error_message = "Invalid email address"
+    ```
+  </Step>
+  
+  <Step title="Provide Translator Comments">
+    Help translators understand context:
+    
+    ```python
+    # Translators: This appears on the checkout page
+    total_label = _("Total amount")
+    ```
+  </Step>
+  
+  <Step title="Use Named Placeholders">
+    Makes translation easier:
+    
+    ```python
+    # Good
+    _("Welcome, %(name)s!") % {'name': user.name}
+    
+    # Bad - order might change in other languages
+    _("Welcome, %s!") % user.name
+    ```
+  </Step>
+  
+  <Step title="Test All Languages">
+    Verify translations render correctly:
+    
+    ```python tests.py
+    from django.utils.translation import override
+    
+    def test_spanish_translation(self):
+        with override('es'):
+            response = self.client.get('/')
+            self.assertContains(response, '¡Bienvenido!')
+    ```
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Translatable Model
+
+```python models.py
+from django.utils.translation import gettext_lazy as _
+
+class Product(models.Model):
+    name = models.CharField(_('product name'), max_length=200)
+    description = models.TextField(_('description'))
+    price = models.DecimalField(_('price'), max_digits=10, decimal_places=2)
+    
+    class Meta:
+        verbose_name = _('product')
+        verbose_name_plural = _('products')
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+```
+
+### Email Templates
+
+```python
+from django.core.mail import send_mail
+from django.utils.translation import gettext as _
+
+def send_welcome_email(user, language):
+    with override(language):
+        subject = _("Welcome to our site!")
+        message = _("Hello %(name)s, thanks for joining!") % {'name': user.name}
+        
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email='noreply@example.com',
+            recipient_list=[user.email],
+        )
+```
+
+### Language Selector
+
+```django
+{% load i18n %}
+
+<div class="language-selector">
+    {% get_current_language as CURRENT_LANGUAGE %}
+    {% get_available_languages as AVAILABLE_LANGUAGES %}
+    
+    {% for lang_code, lang_name in AVAILABLE_LANGUAGES %}
+        {% if lang_code != CURRENT_LANGUAGE %}
+            <a href="{% translate_url lang_code %}" lang="{{ lang_code }}">
+                {{ lang_name }}
+            </a>
+        {% else %}
+            <strong>{{ lang_name }}</strong>
+        {% endif %}
+    {% endfor %}
+</div>
+```
+
+<Warning>
+  Always compile messages after updating translations:
+  
+  ```bash
+  python manage.py compilemessages
+  ```
+  
+  Django only reads compiled `.mo` files, not `.po` files.
+</Warning>
+
+## Related Resources
+
+- [Translation API Reference](/api-reference/i18n/translation)
+- [Localization Settings](/configuration/i18n)
+- [Language Codes Reference](/reference/language-codes)

@@ -1,0 +1,490 @@
+---
+title: Sessions Framework
+description: Session management for anonymous and authenticated users
+---
+
+The Django session framework stores arbitrary data on a per-visitor basis. It abstracts the sending and receiving of cookies and stores session data on the server side.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.sessions',
+]
+
+MIDDLEWARE = [
+    'django.contrib.sessions.middleware.SessionMiddleware',
+]
+```
+
+Run migrations for database-backed sessions:
+
+```bash
+python manage.py migrate
+```
+
+## Using Sessions
+
+The session is a dictionary-like object available on the request:
+
+```python views.py
+from django.shortcuts import render
+
+def shopping_cart(request):
+    # Set session data
+    request.session['cart_items'] = [
+        {'product_id': 1, 'quantity': 2},
+        {'product_id': 5, 'quantity': 1},
+    ]
+    
+    # Get session data
+    cart = request.session.get('cart_items', [])
+    
+    # Check if key exists
+    if 'user_preferences' in request.session:
+        prefs = request.session['user_preferences']
+    
+    # Delete session key
+    try:
+        del request.session['cart_items']
+    except KeyError:
+        pass
+    
+    # Clear all session data
+    request.session.clear()
+    
+    return render(request, 'cart.html', {'cart': cart})
+```
+
+## Session API
+
+The session object has dictionary-like methods from `django.contrib.sessions.backends.base.SessionBase`:
+
+```python
+# Set item
+request.session['key'] = 'value'
+request.session.setdefault('key', 'default')
+
+# Get item
+value = request.session['key']
+value = request.session.get('key', 'default')
+
+# Delete item
+del request.session['key']
+value = request.session.pop('key', 'default')
+
+# Check existence
+if 'key' in request.session:
+    pass
+
+# Get all keys
+keys = request.session.keys()
+
+# Get all items
+items = request.session.items()
+
+# Get all values
+values = request.session.values()
+
+# Clear all data
+request.session.clear()
+
+# Flush (delete session and create new one)
+request.session.flush()
+```
+
+## Session Methods
+
+```python views.py
+def my_view(request):
+    # Get session key
+    session_key = request.session.session_key
+    
+    # Check if session is empty
+    is_empty = request.session.is_empty()
+    
+    # Set expiry (in seconds)
+    request.session.set_expiry(3600)  # Expire in 1 hour
+    request.session.set_expiry(0)     # Expire when browser closes
+    request.session.set_expiry(None)  # Use global session expiry
+    
+    # Get expiry age
+    expiry = request.session.get_expiry_age()
+    
+    # Get expiry date
+    expiry_date = request.session.get_expiry_date()
+    
+    # Clear expired sessions (manually)
+    request.session.clear_expired()
+    
+    # Force save (when modifying nested objects)
+    request.session.modified = True
+```
+
+## Session Backends
+
+Configure the session backend in settings:
+
+### Database Backend (Default)
+
+```python settings.py
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+```
+
+Stores sessions in the `django_session` table.
+
+### Cache Backend
+
+```python settings.py
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'  # Which cache to use
+```
+
+Faster but sessions are lost when cache is cleared.
+
+### Cached Database Backend
+
+```python settings.py
+SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
+```
+
+Writes to both cache and database. Reads from cache first.
+
+### File Backend
+
+```python settings.py
+SESSION_ENGINE = 'django.contrib.sessions.backends.file'
+SESSION_FILE_PATH = '/tmp/django_sessions'  # Optional
+```
+
+Stores sessions as files on the filesystem.
+
+### Cookie Backend
+
+```python settings.py
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
+```
+
+Stores all session data in the cookie (signed for security).
+
+## Session Settings
+
+```python settings.py
+# Session cookie settings
+SESSION_COOKIE_NAME = 'sessionid'
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
+SESSION_COOKIE_DOMAIN = None
+SESSION_COOKIE_PATH = '/'
+SESSION_COOKIE_SECURE = False  # True for HTTPS only
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'  # 'Strict', 'Lax', or None
+
+# Expire session when browser closes
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Save session on every request
+SESSION_SAVE_EVERY_REQUEST = False
+
+# Serializer for session data
+SESSION_SERIALIZER = 'django.contrib.sessions.serializers.JSONSerializer'
+```
+
+## Session Serializers
+
+### JSON Serializer (Default)
+
+```python settings.py
+SESSION_SERIALIZER = 'django.contrib.sessions.serializers.JSONSerializer'
+```
+
+Safer but only supports JSON-serializable types.
+
+### Pickle Serializer
+
+```python settings.py
+SESSION_SERIALIZER = 'django.contrib.sessions.serializers.PickleSerializer'
+```
+
+Supports all Python objects but less secure.
+
+## Accessing Session Data
+
+### Complex Data Structures
+
+```python views.py
+def cart_view(request):
+    # Initialize cart if not exists
+    if 'cart' not in request.session:
+        request.session['cart'] = {}
+    
+    # Add item to cart
+    product_id = '123'
+    if product_id in request.session['cart']:
+        request.session['cart'][product_id] += 1
+    else:
+        request.session['cart'][product_id] = 1
+    
+    # IMPORTANT: Mark session as modified when updating nested objects
+    request.session.modified = True
+    
+    return render(request, 'cart.html')
+```
+
+### User Preferences
+
+```python views.py
+def set_theme(request):
+    theme = request.POST.get('theme', 'light')
+    
+    # Store preference
+    if 'preferences' not in request.session:
+        request.session['preferences'] = {}
+    
+    request.session['preferences']['theme'] = theme
+    request.session.modified = True
+    
+    return redirect('home')
+
+def home(request):
+    # Get theme preference
+    preferences = request.session.get('preferences', {})
+    theme = preferences.get('theme', 'light')
+    
+    return render(request, 'home.html', {'theme': theme})
+```
+
+## Session in Templates
+
+```django template.html
+<!-- Access session data -->
+{% if request.session.cart %}
+    <p>Items in cart: {{ request.session.cart|length }}</p>
+{% endif %}
+
+<!-- User preferences -->
+<body class="theme-{{ request.session.preferences.theme|default:'light' }}">
+```
+
+## Test Cookie
+
+Check if cookies are enabled:
+
+```python views.py
+def test_cookie_view(request):
+    # Set test cookie
+    request.session.set_test_cookie()
+    return render(request, 'test.html')
+
+def check_cookie_view(request):
+    # Check if test cookie worked
+    if request.session.test_cookie_worked():
+        request.session.delete_test_cookie()
+        return render(request, 'success.html')
+    else:
+        return render(request, 'enable_cookies.html')
+```
+
+## Clearing Sessions
+
+### Management Command
+
+Clear expired sessions:
+
+```bash
+python manage.py clearsessions
+```
+
+### Programmatically
+
+```python
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+
+# Delete expired sessions
+Session.objects.filter(expire_date__lt=timezone.now()).delete()
+
+# Delete all sessions
+Session.objects.all().delete()
+
+# Delete sessions for a specific user
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+user = User.objects.get(username='john')
+
+# Get user's session key from somewhere (e.g., stored in UserProfile)
+Session.objects.filter(session_key=user_session_key).delete()
+```
+
+## Session Model
+
+The Session model is in `django.contrib.sessions.models.Session`:
+
+```python
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+
+# Get all active sessions
+active_sessions = Session.objects.filter(expire_date__gte=timezone.now())
+
+# Get session by key
+session = Session.objects.get(session_key='abcd1234')
+
+# Get session data
+data = session.get_decoded()
+print(data)  # Dictionary of session data
+```
+
+## Session Security
+
+### Cycle Session Key
+
+Change session key on login to prevent session fixation:
+
+```python views.py
+from django.contrib.auth import login
+
+def login_view(request):
+    user = authenticate(username=username, password=password)
+    if user:
+        # This cycles the session key automatically
+        login(request, user)
+        return redirect('home')
+```
+
+### Manual Cycle
+
+```python
+def sensitive_operation(request):
+    # Preserve session data but change key
+    request.session.cycle_key()
+    # Perform operation
+```
+
+## Session in Class-Based Views
+
+```python views.py
+from django.views.generic import View, TemplateView
+from django.shortcuts import render
+
+class CartView(View):
+    def get(self, request):
+        cart = request.session.get('cart', {})
+        return render(request, 'cart.html', {'cart': cart})
+    
+    def post(self, request):
+        # Add item to cart
+        product_id = request.POST.get('product_id')
+        
+        if 'cart' not in request.session:
+            request.session['cart'] = {}
+        
+        request.session['cart'][product_id] = (
+            request.session['cart'].get(product_id, 0) + 1
+        )
+        request.session.modified = True
+        
+        return redirect('cart')
+
+class PreferencesView(TemplateView):
+    template_name = 'preferences.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['preferences'] = self.request.session.get('preferences', {})
+        return context
+```
+
+## Common Patterns
+
+### Shopping Cart
+
+```python views.py
+class CartManager:
+    def __init__(self, request):
+        self.session = request.session
+        cart = self.session.get('cart')
+        if not cart:
+            cart = self.session['cart'] = {}
+        self.cart = cart
+    
+    def add(self, product_id, quantity=1):
+        product_id = str(product_id)
+        if product_id in self.cart:
+            self.cart[product_id] += quantity
+        else:
+            self.cart[product_id] = quantity
+        self.save()
+    
+    def remove(self, product_id):
+        product_id = str(product_id)
+        if product_id in self.cart:
+            del self.cart[product_id]
+            self.save()
+    
+    def clear(self):
+        del self.session['cart']
+        self.save()
+    
+    def save(self):
+        self.session.modified = True
+    
+    def __len__(self):
+        return sum(self.cart.values())
+
+# Usage
+def add_to_cart(request, product_id):
+    cart = CartManager(request)
+    cart.add(product_id)
+    return redirect('cart')
+```
+
+### Wizard/Multi-Step Forms
+
+```python views.py
+def step1(request):
+    if request.method == 'POST':
+        request.session['wizard_step1'] = request.POST.dict()
+        return redirect('step2')
+    return render(request, 'step1.html')
+
+def step2(request):
+    if 'wizard_step1' not in request.session:
+        return redirect('step1')
+    
+    if request.method == 'POST':
+        request.session['wizard_step2'] = request.POST.dict()
+        return redirect('step3')
+    
+    return render(request, 'step2.html')
+
+def complete(request):
+    step1_data = request.session.get('wizard_step1', {})
+    step2_data = request.session.get('wizard_step2', {})
+    
+    # Process all data...
+    
+    # Clean up
+    del request.session['wizard_step1']
+    del request.session['wizard_step2']
+    
+    return render(request, 'complete.html')
+```
+
+## Key Classes Reference
+
+### SessionBase
+
+Location: `django.contrib.sessions.backends.base.SessionBase`
+
+Base class for all session backends.
+
+### Session Model
+
+Location: `django.contrib.sessions.models.Session`
+
+Database model for storing sessions (when using database backend).
+
+<Note>
+When modifying mutable objects in session (like lists or dicts), you must set `request.session.modified = True` to ensure changes are saved.
+</Note>

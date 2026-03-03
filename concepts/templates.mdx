@@ -1,0 +1,502 @@
+---
+title: 'Templates'
+description: 'Render dynamic HTML using Django template engine with variables, tags, and filters'
+---
+
+## Overview
+
+Django templates separate presentation from business logic. The template engine compiles template strings into renderable objects that combine HTML markup with dynamic data.
+
+<Note>
+  From `django.template.base`, the Template class compiles template strings and renders them with context data. This happens in two stages: compilation and rendering.
+</Note>
+
+## Template Basics
+
+### Creating Templates
+
+Templates are HTML files with special syntax:
+
+```html
+<!-- articles/list.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ page_title }}</title>
+</head>
+<body>
+    <h1>Articles</h1>
+    {% if articles %}
+        <ul>
+        {% for article in articles %}
+            <li>
+                <a href="{% url 'article-detail' article.id %}">
+                    {{ article.title }}
+                </a>
+                <span>{{ article.published_date|date:"F j, Y" }}</span>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No articles available.</p>
+    {% endif %}
+</body>
+</html>
+```
+
+### Template Syntax
+
+From the Django template system documentation in `base.py`:
+
+- **Variables**: `{{ variable }}` - Outputs variable value
+- **Tags**: `{% tag %}` - Performs logic and control flow
+- **Filters**: `{{ variable|filter }}` - Transforms variable output
+- **Comments**: `{# comment #}` - Not rendered in output
+
+## Variables
+
+Variables are resolved from the context:
+
+```html
+<!-- Simple variables -->
+{{ article.title }}
+{{ article.author.name }}
+{{ article.published_date }}
+
+<!-- Dictionary lookups -->
+{{ data.key }}
+{{ settings.DEBUG }}
+
+<!-- List indices -->
+{{ my_list.0 }}
+{{ colors.2 }}
+
+<!-- Method calls (no parentheses) -->
+{{ article.get_absolute_url }}
+{{ user.get_full_name }}
+```
+
+<Tip>
+  The template engine tries multiple lookup strategies: dictionary lookup, attribute lookup, list index, and method call (without arguments).
+</Tip>
+
+## Template Tags
+
+### Control Flow
+
+```html
+<!-- if/elif/else -->
+{% if user.is_authenticated %}
+    <p>Welcome, {{ user.username }}!</p>
+{% elif user.is_anonymous %}
+    <p>Please log in.</p>
+{% else %}
+    <p>Hello, guest!</p>
+{% endif %}
+
+<!-- for loops -->
+{% for article in articles %}
+    <article>
+        <h2>{{ article.title }}</h2>
+        <p>{{ article.content|truncatewords:50 }}</p>
+    </article>
+{% empty %}
+    <p>No articles found.</p>
+{% endfor %}
+
+<!-- forloop variables -->
+{% for item in items %}
+    {{ forloop.counter }}. {{ item.name }}
+    {% if forloop.first %}<strong>First item</strong>{% endif %}
+    {% if forloop.last %}<strong>Last item</strong>{% endif %}
+{% endfor %}
+```
+
+### URL Generation
+
+```html
+<!-- URL by name -->
+<a href="{% url 'article-detail' article.id %}">View Article</a>
+
+<!-- URL with multiple arguments -->
+<a href="{% url 'article-edit' pk=article.id %}">Edit</a>
+
+<!-- URL in namespaced app -->
+<a href="{% url 'blog:article-list' %}">Blog</a>
+
+<!-- Store URL in variable -->
+{% url 'article-detail' article.id as article_url %}
+<a href="{{ article_url }}">{{ article.title }}</a>
+```
+
+### Template Inheritance
+
+```html
+<!-- base.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}My Site{% endblock %}</title>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header>
+        {% block header %}
+        <nav>
+            <a href="{% url 'home' %}">Home</a>
+            <a href="{% url 'about' %}">About</a>
+        </nav>
+        {% endblock %}
+    </header>
+    
+    <main>
+        {% block content %}
+        {% endblock %}
+    </main>
+    
+    <footer>
+        {% block footer %}
+        <p>&copy; 2024 My Site</p>
+        {% endblock %}
+    </footer>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+```
+
+```html
+<!-- article_detail.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} - {{ block.super }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/article.css">
+{% endblock %}
+
+{% block content %}
+<article>
+    <h1>{{ article.title }}</h1>
+    <p class="meta">By {{ article.author }} on {{ article.published_date }}</p>
+    <div class="content">{{ article.content|safe }}</div>
+</article>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/article.js"></script>
+{% endblock %}
+```
+
+<Note>
+  `{% extends %}` must be the first tag in the template. Use `{{ block.super }}` to include parent block content.
+</Note>
+
+### Including Templates
+
+```html
+<!-- Include another template -->
+{% include "articles/article_card.html" %}
+
+<!-- Include with context variables -->
+{% include "articles/article_card.html" with article=featured_article %}
+
+<!-- Include with only specific context -->
+{% include "articles/article_card.html" with article=item only %}
+```
+
+### Static Files
+
+```html
+{% load static %}
+
+<!-- Link to static files -->
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+<script src="{% static 'js/main.js' %}"></script>
+<img src="{% static 'images/logo.png' %}" alt="Logo">
+
+<!-- Store static URL in variable -->
+{% static 'images/icon.png' as icon_url %}
+<img src="{{ icon_url }}" alt="Icon">
+```
+
+## Template Filters
+
+Filters transform variable output using the pipe (`|`) separator:
+
+### Text Filters
+
+```html
+<!-- String manipulation -->
+{{ article.title|lower }}           <!-- lowercase -->
+{{ article.title|upper }}           <!-- UPPERCASE -->
+{{ article.title|title }}           <!-- Title Case -->
+{{ article.title|capfirst }}        <!-- Capitalize first -->
+
+<!-- Truncation -->
+{{ article.content|truncatewords:30 }}       <!-- First 30 words -->
+{{ article.content|truncatechars:100 }}      <!-- First 100 chars -->
+{{ article.title|slice:":10" }}              <!-- First 10 chars -->
+
+<!-- Line breaks -->
+{{ article.content|linebreaks }}            <!-- <p> and <br> tags -->
+{{ article.content|linebreaksbr }}          <!-- <br> tags only -->
+
+<!-- HTML -->
+{{ article.content|safe }}                  <!-- Don't escape HTML -->
+{{ article.content|escape }}                <!-- Escape HTML -->
+{{ article.content|striptags }}             <!-- Remove HTML tags -->
+```
+
+### Date/Time Filters
+
+```html
+<!-- Date formatting -->
+{{ article.published_date|date:"Y-m-d" }}              <!-- 2024-01-15 -->
+{{ article.published_date|date:"F j, Y" }}             <!-- January 15, 2024 -->
+{{ article.published_date|date:"D, M j, Y" }}          <!-- Mon, Jan 15, 2024 -->
+{{ article.published_date|time:"H:i" }}                <!-- 14:30 -->
+
+<!-- Time since/until -->
+{{ article.published_date|timesince }}                 <!-- "2 days, 3 hours" -->
+{{ article.published_date|timeuntil }}                 <!-- "in 5 hours" -->
+```
+
+### Numeric Filters
+
+```html
+<!-- Number formatting -->
+{{ value|add:"5" }}                    <!-- Add 5 -->
+{{ total|floatformat:2 }}              <!-- 2 decimal places -->
+{{ price|floatformat:"0" }}            <!-- Round to integer -->
+
+<!-- Lists/querysets -->
+{{ articles|length }}                  <!-- Count items -->
+{{ articles|first }}                   <!-- First item -->
+{{ articles|last }}                    <!-- Last item -->
+{{ articles|random }}                  <!-- Random item -->
+{{ articles|slice:":5" }}              <!-- First 5 items -->
+```
+
+### Default Values
+
+```html
+<!-- Provide defaults -->
+{{ value|default:"nothing" }}           <!-- If value is falsy -->
+{{ value|default_if_none:"N/A" }}       <!-- If value is None -->
+
+<!-- Chain filters -->
+{{ article.title|default:"Untitled"|upper }}
+{{ bio|striptags|truncatewords:50 }}
+```
+
+<Warning>
+  The `safe` filter marks content as safe from escaping. Only use it with trusted content to prevent XSS attacks.
+</Warning>
+
+## Context Processors
+
+Context processors add variables to every template:
+
+```python
+# settings.py
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+                'myapp.context_processors.site_settings',
+            ],
+        },
+    },
+]
+```
+
+```python
+# myapp/context_processors.py
+def site_settings(request):
+    """Add site-wide settings to all templates"""
+    return {
+        'SITE_NAME': 'My Site',
+        'SUPPORT_EMAIL': 'support@example.com',
+        'CURRENT_YEAR': datetime.now().year,
+    }
+```
+
+## Custom Template Tags
+
+### Simple Tags
+
+```python
+# myapp/templatetags/custom_tags.py
+from django import template
+
+register = template.Library()
+
+@register.simple_tag
+def current_time(format_string):
+    """Return current time formatted"""
+    return datetime.now().strftime(format_string)
+
+@register.simple_tag(takes_context=True)
+def user_greeting(context):
+    """Greet the current user"""
+    user = context['user']
+    if user.is_authenticated:
+        return f"Hello, {user.first_name}!"
+    return "Hello, guest!"
+```
+
+```html
+<!-- Use custom tag -->
+{% load custom_tags %}
+
+<p>Current time: {% current_time "%Y-%m-%d %H:%M" %}</p>
+<p>{% user_greeting %}</p>
+```
+
+### Inclusion Tags
+
+```python
+# myapp/templatetags/custom_tags.py
+@register.inclusion_tag('articles/latest_articles.html')
+def show_latest_articles(count=5):
+    """Render latest articles component"""
+    articles = Article.objects.filter(
+        status='published'
+    ).order_by('-published_date')[:count]
+    return {'articles': articles}
+```
+
+```html
+<!-- templates/articles/latest_articles.html -->
+<div class="latest-articles">
+    <h3>Latest Articles</h3>
+    <ul>
+    {% for article in articles %}
+        <li><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></li>
+    {% endfor %}
+    </ul>
+</div>
+```
+
+```html
+<!-- Use in templates -->
+{% load custom_tags %}
+{% show_latest_articles 10 %}
+```
+
+## Custom Filters
+
+```python
+# myapp/templatetags/custom_filters.py
+from django import template
+
+register = template.Library()
+
+@register.filter
+def multiply(value, arg):
+    """Multiply value by argument"""
+    try:
+        return float(value) * float(arg)
+    except (ValueError, TypeError):
+        return ''
+
+@register.filter
+def startswith(text, prefix):
+    """Check if text starts with prefix"""
+    return str(text).startswith(str(prefix))
+```
+
+```html
+{% load custom_filters %}
+
+<p>Price: ${{ price|multiply:1.2|floatformat:2 }}</p>
+
+{% if article.title|startswith:"Django" %}
+    <span class="badge">Django Article</span>
+{% endif %}
+```
+
+## Template Configuration
+
+From `django.template.engine.Engine`, configure the template system:
+
+```python
+# settings.py
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [
+            BASE_DIR / 'templates',           # Project-level templates
+            BASE_DIR / 'myapp' / 'templates', # App-specific templates
+        ],
+        'APP_DIRS': True,  # Auto-discover templates in installed apps
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+            ],
+            'debug': DEBUG,
+            'autoescape': True,  # Auto-escape variables
+            'string_if_invalid': '',  # Default for missing variables
+        },
+    },
+]
+```
+
+## Template Loading
+
+```python
+# In views.py
+from django.template import loader
+from django.shortcuts import render
+
+# Method 1: Using render() shortcut
+def my_view(request):
+    return render(request, 'myapp/template.html', {
+        'data': 'value'
+    })
+
+# Method 2: Using loader
+def my_view(request):
+    template = loader.get_template('myapp/template.html')
+    html = template.render({'data': 'value'}, request)
+    return HttpResponse(html)
+
+# Method 3: Direct Template instantiation
+from django.template import Template, Context
+
+def my_view(request):
+    template = Template('<h1>{{ title }}</h1>')
+    context = Context({'title': 'Hello World'})
+    html = template.render(context)
+    return HttpResponse(html)
+```
+
+## Best Practices
+
+1. **Use template inheritance**: Create a base template and extend it
+2. **Keep logic minimal**: Move complex logic to views or template tags
+3. **Use filters carefully**: Chain filters for readability
+4. **Load tags once**: Use `{% load %}` at the top of templates
+5. **Name blocks clearly**: Use descriptive block names
+6. **Escape user content**: Let Django auto-escape by default
+
+<Warning>
+  Never use `{% autoescape off %}` with user-generated content. This can lead to Cross-Site Scripting (XSS) vulnerabilities.
+</Warning>
+
+## Next Steps
+
+- Explore [Views](/concepts/views) for passing context to templates
+- Learn about [Static Files](/deployment/static-files) management
+- Understand [Forms](/concepts/forms) for template form rendering
+- Master [Template Tags](https://docs.djangoproject.com/en/stable/ref/templates/builtins/) reference

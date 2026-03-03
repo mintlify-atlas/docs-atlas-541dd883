@@ -1,0 +1,492 @@
+---
+title: Model Meta Options
+description: Complete API reference for Django Model Meta class options
+---
+
+# Model Meta Options
+
+The Model `Meta` class contains metadata about the model that is not field-specific.
+
+## Usage
+
+```python
+class MyModel(models.Model):
+    # Fields
+    name = models.CharField(max_length=100)
+    
+    class Meta:
+        db_table = 'my_custom_table'
+        ordering = ['-created']
+        verbose_name = 'My Model'
+```
+
+**Reference:** `django/db/models/options.py:90`
+
+## Available Meta Options
+
+### abstract
+
+If True, this model will be an abstract base class.
+
+```python
+class Meta:
+    abstract = True
+```
+
+<ParamField path="abstract" type="bool" default="False">
+  When True, the model is treated as an abstract base class and no database table is created.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:146`
+
+### app_label
+
+Defines which app the model belongs to. Rarely needed as Django can usually determine this automatically.
+
+```python
+class Meta:
+    app_label = 'myapp'
+```
+
+<ParamField path="app_label" type="str" optional>
+  The name of the app that contains this model.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:137`
+
+### base_manager_name
+
+The name of the manager to use for `_base_manager`.
+
+```python
+class Meta:
+    base_manager_name = 'objects'
+```
+
+<ParamField path="base_manager_name" type="str" optional>
+  The attribute name of the manager to use as the base manager.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:121`
+
+### db_table
+
+The name of the database table to use for the model.
+
+```python
+class Meta:
+    db_table = 'my_custom_table_name'
+```
+
+<ParamField path="db_table" type="str" optional>
+  The database table name. If not provided, Django constructs one from app_label and model name.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:126`
+
+### db_table_comment
+
+A comment on the database table. Requires database support for comments.
+
+```python
+class Meta:
+    db_table_comment = 'This table stores customer information'
+```
+
+<ParamField path="db_table_comment" type="str" optional>
+  A comment to add to the database table.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:127`
+
+### db_tablespace
+
+The database tablespace to use for this model's table.
+
+```python
+class Meta:
+    db_tablespace = 'my_tablespace'
+```
+
+<ParamField path="db_tablespace" type="str" optional>
+  The name of the database tablespace. Falls back to DEFAULT_TABLESPACE setting.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:140`
+
+### default_manager_name
+
+The name of the manager to use as the default manager.
+
+```python
+class Meta:
+    default_manager_name = 'objects'
+```
+
+<ParamField path="default_manager_name" type="str" optional>
+  The attribute name of the manager to use as the default manager.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:122`
+
+### default_permissions
+
+Defaults to `('add', 'change', 'delete', 'view')`. Customize to change the permissions created automatically.
+
+```python
+class Meta:
+    default_permissions = ('add', 'change', 'delete')
+    # or
+    default_permissions = ()  # No default permissions
+```
+
+<ParamField path="default_permissions" type="tuple" default="('add', 'change', 'delete', 'view')">
+  A tuple/list of permission names to create automatically.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:134`
+
+### default_related_name
+
+The name that will be used by default for the relation from a related object back to this one.
+
+```python
+class Meta:
+    default_related_name = '%(app_label)s_%(model_name)s_related'
+```
+
+<ParamField path="default_related_name" type="str" optional>
+  Default related_name for reverse relations. Supports %(app_label)s, %(model_name)s, and %(class)s substitution.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:170`
+
+### get_latest_by
+
+The name of a field or list of field names to use for the `latest()` and `earliest()` methods.
+
+```python
+class Meta:
+    get_latest_by = 'created'
+    # or
+    get_latest_by = ['created', 'modified']
+```
+
+<ParamField path="get_latest_by" type="str | list[str]" optional>
+  Field name(s) to order by for latest() and earliest() methods.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:138`
+
+### managed
+
+Defaults to True. If False, no database table creation, modification, or deletion will be performed for this model.
+
+```python
+class Meta:
+    managed = False  # Don't create/modify table
+```
+
+<ParamField path="managed" type="bool" default="True">
+  If False, Django will not create or modify database tables for this model.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:147`
+
+### order_with_respect_to
+
+Makes this object orderable with respect to the given field.
+
+```python
+class Answer(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    
+    class Meta:
+        order_with_respect_to = 'question'
+```
+
+<ParamField path="order_with_respect_to" type="str" optional>
+  Field name that defines the ordering relationship.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:139`
+
+### ordering
+
+The default ordering for the object.
+
+```python
+class Meta:
+    ordering = ['-created', 'name']
+    # or
+    ordering = ['?']  # Random ordering
+```
+
+<ParamField path="ordering" type="list[str]" optional>
+  List of field names to order by. Prefix with '-' for descending order. Use '?' for random ordering.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:128`
+
+### permissions
+
+Extra permissions to enter into the permissions table when creating this object.
+
+```python
+class Meta:
+    permissions = [
+        ('can_publish', 'Can publish articles'),
+        ('can_archive', 'Can archive articles'),
+    ]
+```
+
+<ParamField path="permissions" type="list[tuple]" optional>
+  List of 2-tuples in the format (permission_code, human_readable_permission_name).
+</ParamField>
+
+**Reference:** `django/db/models/options.py:135`
+
+### proxy
+
+If True, a model that subclasses another model will be treated as a proxy model.
+
+```python
+class MyPerson(Person):
+    class Meta:
+        proxy = True
+    
+    def do_something(self):
+        # Custom method
+        pass
+```
+
+<ParamField path="proxy" type="bool" default="False">
+  If True, creates a proxy model that doesn't create a new database table.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:148`
+
+### required_db_features
+
+List of database features that the current connection should have so that the model is considered during migration.
+
+```python
+class Meta:
+    required_db_features = ['gis_enabled']
+```
+
+<ParamField path="required_db_features" type="list[str]" optional>
+  List of database feature names required for this model.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:141`
+
+### required_db_vendor
+
+The name of a supported database vendor that this model is specific to.
+
+```python
+class Meta:
+    required_db_vendor = 'postgresql'
+```
+
+<ParamField path="required_db_vendor" type="str" optional>
+  Database vendor name (e.g., 'postgresql', 'mysql', 'sqlite', 'oracle').
+</ParamField>
+
+**Reference:** `django/db/models/options.py:142`
+
+### select_on_save
+
+Determines if Django will use pre-1.6 `select` behavior when saving objects.
+
+```python
+class Meta:
+    select_on_save = True
+```
+
+<ParamField path="select_on_save" type="bool" default="False">
+  If True, saves will use SELECT to determine whether to INSERT or UPDATE.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:133`
+
+### indexes
+
+A list of indexes that you want to define on the model.
+
+```python
+from django.db import models
+
+class Meta:
+    indexes = [
+        models.Index(fields=['last_name', 'first_name']),
+        models.Index(fields=['created'], name='created_idx'),
+    ]
+```
+
+<ParamField path="indexes" type="list[Index]" optional>
+  List of Index objects to create on the model's table.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:130`
+
+### constraints
+
+A list of constraints that you want to define on the model.
+
+```python
+from django.db import models
+
+class Meta:
+    constraints = [
+        models.CheckConstraint(
+            check=models.Q(age__gte=18),
+            name='age_gte_18',
+        ),
+        models.UniqueConstraint(
+            fields=['email'],
+            name='unique_email',
+        ),
+    ]
+```
+
+<ParamField path="constraints" type="list[Constraint]" optional>
+  List of Constraint objects to apply to the model's table.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:131`
+
+### unique_together
+
+Sets of field names that, taken together, must be unique.
+
+```python
+class Meta:
+    unique_together = [['driver', 'restaurant']]
+    # or
+    unique_together = ['driver', 'restaurant']  # Single constraint
+```
+
+<ParamField path="unique_together" type="list[list[str]]" optional>
+  A list of lists of field names that must be unique together. Deprecated in favor of UniqueConstraint.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:132`
+
+### verbose_name
+
+A human-readable name for the object, singular.
+
+```python
+class Meta:
+    verbose_name = 'person'
+```
+
+<ParamField path="verbose_name" type="str" optional>
+  Human-readable name for the model (singular). If not provided, Django creates one from the class name.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:124`
+
+### verbose_name_plural
+
+The plural name for the object.
+
+```python
+class Meta:
+    verbose_name_plural = 'people'
+```
+
+<ParamField path="verbose_name_plural" type="str" optional>
+  Human-readable plural name. Defaults to verbose_name + 's'.
+</ParamField>
+
+**Reference:** `django/db/models/options.py:125`
+
+## Read-Only Meta Attributes
+
+These attributes are available on `Model._meta` but cannot be set in the Meta class:
+
+### label
+
+Representation of the model in the format `app_label.ModelName`.
+
+```python
+MyModel._meta.label  # 'myapp.MyModel'
+```
+
+**Reference:** `django/db/models/options.py:173`
+
+### label_lower
+
+Lowercase version of label.
+
+```python
+MyModel._meta.label_lower  # 'myapp.mymodel'
+```
+
+**Reference:** `django/db/models/options.py:177`
+
+### object_name
+
+The name of the model class.
+
+```python
+MyModel._meta.object_name  # 'MyModel'
+```
+
+**Reference:** `django/db/models/options.py:136`
+
+### model_name
+
+Lowercase version of the model name.
+
+```python
+MyModel._meta.model_name  # 'mymodel'
+```
+
+**Reference:** `django/db/models/options.py:123`
+
+## Methods
+
+### get_field()
+
+Returns a field instance given a field name.
+
+```python
+field = MyModel._meta.get_field('name')
+```
+
+<ParamField path="field_name" type="str" required>
+  The name of the field to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="Field">
+  The Field instance.
+</ResponseField>
+
+**Reference:** `django/db/models/options.py:670`
+
+### get_fields()
+
+Returns a tuple of fields associated with the model.
+
+```python
+fields = MyModel._meta.get_fields()
+fields = MyModel._meta.get_fields(include_hidden=True)
+```
+
+<ParamField path="include_parents" type="bool" default="True">
+  Include fields from parent classes.
+</ParamField>
+
+<ParamField path="include_hidden" type="bool" default="False">
+  Include fields with related_name starting with '+'.
+</ParamField>
+
+<ResponseField name="return" type="tuple[Field]">
+  Tuple of Field instances.
+</ResponseField>
+
+**Reference:** `django/db/models/options.py:865`

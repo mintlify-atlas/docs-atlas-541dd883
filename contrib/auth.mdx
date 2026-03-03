@@ -1,0 +1,480 @@
+---
+title: Django Authentication
+description: User authentication, permissions, and authorization system
+---
+
+The Django authentication system handles user authentication and authorization. It provides User models, permissions, groups, and authentication backends.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.auth',
+    'django.contrib.contenttypes',  # Required for permissions
+]
+
+MIDDLEWARE = [
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+]
+```
+
+## User Model
+
+The built-in User model is defined in `django.contrib.auth.models`:
+
+```python
+from django.contrib.auth.models import User
+
+# Create user
+user = User.objects.create_user(
+    username='john',
+    email='john@example.com',
+    password='secret123',
+    first_name='John',
+    last_name='Doe'
+)
+
+# Create superuser
+User.objects.create_superuser(
+    username='admin',
+    email='admin@example.com',
+    password='admin123'
+)
+```
+
+### User Model Fields
+
+From `django.contrib.auth.models.User`:
+
+```python
+class User(AbstractUser):
+    # Fields from AbstractUser:
+    username: CharField(max_length=150, unique=True)
+    first_name: CharField(max_length=150)
+    last_name: CharField(max_length=150)
+    email: EmailField(max_length=254)
+    is_staff: BooleanField(default=False)
+    is_active: BooleanField(default=True)
+    is_superuser: BooleanField(default=False)
+    last_login: DateTimeField()
+    date_joined: DateTimeField()
+    
+    # Relationships
+    groups: ManyToManyField('Group')
+    user_permissions: ManyToManyField('Permission')
+```
+
+### User Methods
+
+```python
+from django.contrib.auth.models import User
+
+user = User.objects.get(username='john')
+
+# Check password
+if user.check_password('secret123'):
+    print('Password is correct')
+
+# Set password (hashes automatically)
+user.set_password('newsecret')
+user.save()
+
+# Get full name
+full_name = user.get_full_name()  # "John Doe"
+short_name = user.get_short_name()  # "John"
+
+# Email user
+user.email_user(
+    subject='Hello',
+    message='Welcome to our site!',
+    from_email='noreply@example.com'
+)
+
+# Check permissions
+if user.has_perm('blog.add_article'):
+    print('User can add articles')
+
+# Check if user is in group
+if user.groups.filter(name='editors').exists():
+    print('User is an editor')
+```
+
+## Authentication
+
+### Login and Logout
+
+From `django.contrib.auth`:
+
+```python views.py
+from django.contrib.auth import authenticate, login, logout
+from django.shortcuts import render, redirect
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        
+        # Authenticate user
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            # Log in the user
+            login(request, user)
+            return redirect('home')
+        else:
+            return render(request, 'login.html', {
+                'error': 'Invalid credentials'
+            })
+    
+    return render(request, 'login.html')
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+```
+
+### Using Built-in Views
+
+Django provides built-in authentication views:
+
+```python urls.py
+from django.contrib.auth import views as auth_views
+from django.urls import path
+
+urlpatterns = [
+    path('login/', auth_views.LoginView.as_view(template_name='login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    path('password-change/', auth_views.PasswordChangeView.as_view(), name='password_change'),
+    path('password-change/done/', auth_views.PasswordChangeDoneView.as_view(), name='password_change_done'),
+    path('password-reset/', auth_views.PasswordResetView.as_view(), name='password_reset'),
+    path('password-reset/done/', auth_views.PasswordResetDoneView.as_view(), name='password_reset_done'),
+    path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
+]
+```
+
+## Permissions
+
+The Permission model is in `django.contrib.auth.models.Permission`:
+
+```python
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
+from myapp.models import Article
+
+# Get content type
+content_type = ContentType.objects.get_for_model(Article)
+
+# Create custom permission
+permission = Permission.objects.create(
+    codename='can_publish',
+    name='Can publish articles',
+    content_type=content_type,
+)
+
+# Add permission to user
+user.user_permissions.add(permission)
+
+# Check permission
+if user.has_perm('myapp.can_publish'):
+    print('User can publish')
+
+# Remove permission
+user.user_permissions.remove(permission)
+```
+
+### Model Permissions
+
+Define custom permissions in your models:
+
+```python models.py
+from django.db import models
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    
+    class Meta:
+        permissions = [
+            ('can_publish', 'Can publish articles'),
+            ('can_feature', 'Can feature articles'),
+        ]
+```
+
+Django automatically creates these permissions:
+- `myapp.add_article`
+- `myapp.change_article`
+- `myapp.delete_article`
+- `myapp.view_article`
+- `myapp.can_publish` (custom)
+- `myapp.can_feature` (custom)
+
+## Groups
+
+The Group model from `django.contrib.auth.models.Group`:
+
+```python
+from django.contrib.auth.models import Group, Permission
+
+# Create group
+editors = Group.objects.create(name='Editors')
+
+# Add permissions to group
+add_article = Permission.objects.get(codename='add_article')
+change_article = Permission.objects.get(codename='change_article')
+can_publish = Permission.objects.get(codename='can_publish')
+
+editors.permissions.add(add_article, change_article, can_publish)
+
+# Add user to group
+user.groups.add(editors)
+
+# Check if user is in group
+if user.groups.filter(name='Editors').exists():
+    print('User is an editor')
+
+# Get all permissions for user (including from groups)
+user_permissions = user.get_all_permissions()
+```
+
+## View Decorators
+
+Protect views with decorators from `django.contrib.auth.decorators`:
+
+```python views.py
+from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
+from django.shortcuts import render
+
+@login_required
+def profile(request):
+    return render(request, 'profile.html')
+
+@login_required(login_url='/accounts/login/')
+def dashboard(request):
+    return render(request, 'dashboard.html')
+
+@permission_required('blog.add_article')
+def create_article(request):
+    return render(request, 'create_article.html')
+
+@permission_required('blog.can_publish', raise_exception=True)
+def publish_article(request, pk):
+    # Will raise PermissionDenied if user doesn't have permission
+    return render(request, 'publish.html')
+
+# Custom test
+def is_staff_or_superuser(user):
+    return user.is_staff or user.is_superuser
+
+@user_passes_test(is_staff_or_superuser)
+def admin_dashboard(request):
+    return render(request, 'admin_dashboard.html')
+```
+
+## Protecting Class-Based Views
+
+```python views.py
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin, UserPassesTestMixin
+from django.views.generic import ListView, CreateView
+
+class ArticleListView(LoginRequiredMixin, ListView):
+    model = Article
+    login_url = '/login/'
+    redirect_field_name = 'redirect_to'
+
+class ArticleCreateView(PermissionRequiredMixin, CreateView):
+    model = Article
+    permission_required = 'blog.add_article'
+    raise_exception = True  # Raise 403 instead of redirecting
+
+class AuthorArticleListView(UserPassesTestMixin, ListView):
+    model = Article
+    
+    def test_func(self):
+        # Only show articles from the logged-in user
+        return self.request.user.is_authenticated
+    
+    def get_queryset(self):
+        return Article.objects.filter(author=self.request.user)
+```
+
+## Custom User Model
+
+Extend the user model using `AbstractUser` or `AbstractBaseUser`:
+
+```python models.py
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+class CustomUser(AbstractUser):
+    bio = models.TextField(blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    website = models.URLField(blank=True)
+    
+    def get_age(self):
+        if self.birth_date:
+            from datetime import date
+            today = date.today()
+            return today.year - self.birth_date.year
+        return None
+```
+
+```python settings.py
+AUTH_USER_MODEL = 'myapp.CustomUser'
+```
+
+### Using AbstractBaseUser
+
+For complete control over the user model:
+
+```python models.py
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.db import models
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError('Users must have an email address')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+    
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(email, password, **extra_fields)
+
+class CustomUser(AbstractBaseUser, PermissionsMixin):
+    email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    date_joined = models.DateTimeField(auto_now_add=True)
+    
+    objects = CustomUserManager()
+    
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
+    
+    def get_full_name(self):
+        return f'{self.first_name} {self.last_name}'
+    
+    def get_short_name(self):
+        return self.first_name
+```
+
+## Password Hashing
+
+From `django.contrib.auth.hashers`:
+
+```python
+from django.contrib.auth.hashers import make_password, check_password
+
+# Hash a password
+hashed = make_password('mypassword')
+# Returns: 'pbkdf2_sha256$...'
+
+# Check password
+is_correct = check_password('mypassword', hashed)
+# Returns: True
+```
+
+Configure password hashers in settings:
+
+```python settings.py
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
+```
+
+## Authentication Backends
+
+Custom authentication backend:
+
+```python backends.py
+from django.contrib.auth.backends import BaseBackend
+from django.contrib.auth.models import User
+
+class EmailBackend(BaseBackend):
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        try:
+            # Allow login with email
+            user = User.objects.get(email=username)
+            if user.check_password(password):
+                return user
+        except User.DoesNotExist:
+            return None
+    
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None
+```
+
+```python settings.py
+AUTHENTICATION_BACKENDS = [
+    'myapp.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',  # Keep default
+]
+```
+
+## Template Context
+
+Access user in templates:
+
+```django template.html
+{% if user.is_authenticated %}
+    <p>Welcome, {{ user.get_full_name|default:user.username }}!</p>
+    
+    {% if user.is_staff %}
+        <a href="{% url 'admin:index' %}">Admin</a>
+    {% endif %}
+    
+    {% if perms.blog.add_article %}
+        <a href="{% url 'create_article' %}">Create Article</a>
+    {% endif %}
+    
+    <a href="{% url 'logout' %}">Logout</a>
+{% else %}
+    <a href="{% url 'login' %}">Login</a>
+{% endif %}
+```
+
+## Key Classes Reference
+
+### User Model
+
+Location: `django.contrib.auth.models.User`
+
+The default user model with username-based authentication.
+
+### Permission
+
+Location: `django.contrib.auth.models.Permission`
+
+Represents a permission that can be assigned to users or groups.
+
+### Group
+
+Location: `django.contrib.auth.models.Group`
+
+Groups are a way to categorize users and apply permissions.
+
+### BaseUserManager
+
+Location: `django.contrib.auth.base_user.BaseUserManager`
+
+Base manager for custom user models.
+
+<Note>
+Always use `User.objects.create_user()` instead of `User.objects.create()` to ensure passwords are properly hashed.
+</Note>

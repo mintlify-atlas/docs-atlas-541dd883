@@ -1,0 +1,565 @@
+---
+title: Email Guide
+description: Learn how to send emails in Django
+---
+
+# Email Guide
+
+Django provides a comprehensive email sending framework that supports text and HTML emails, attachments, and multiple backends.
+
+## Overview
+
+Django's email system consists of:
+- **Email backends** - SMTP, Console, File, Memory, Dummy
+- **Email classes** - `EmailMessage`, `EmailMultiAlternatives`
+- **Helper functions** - `send_mail()`, `send_mass_mail()`
+- **Email utilities** - Attachments, headers, threading
+
+## Quick Start
+
+<Steps>
+  <Step title="Configure Email Settings">
+    Add email configuration to `settings.py`:
+    
+    ```python settings.py
+    # SMTP Configuration
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = 'your-email@gmail.com'
+    EMAIL_HOST_PASSWORD = 'your-app-password'
+    DEFAULT_FROM_EMAIL = 'Your Name <your-email@gmail.com>'
+    ```
+  </Step>
+  
+  <Step title="Send Your First Email">
+    Use the `send_mail()` function:
+    
+    ```python
+    from django.core.mail import send_mail
+    
+    send_mail(
+        subject='Hello from Django',
+        message='This is a test email.',
+        from_email='sender@example.com',
+        recipient_list=['recipient@example.com'],
+        fail_silently=False,
+    )
+    ```
+  </Step>
+</Steps>
+
+## Email Backends
+
+### SMTP Backend (Production)
+
+```python settings.py
+# Gmail
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'your-email@gmail.com'
+EMAIL_HOST_PASSWORD = 'your-app-password'
+
+# SendGrid
+EMAIL_HOST = 'smtp.sendgrid.net'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'apikey'
+EMAIL_HOST_PASSWORD = 'your-sendgrid-api-key'
+
+# AWS SES
+EMAIL_HOST = 'email-smtp.us-east-1.amazonaws.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+```
+
+<Note>
+  For Gmail, enable 2-factor authentication and create an App Password instead of using your regular password.
+</Note>
+
+### Console Backend (Development)
+
+```python settings.py
+# Print emails to console
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+```
+
+Emails are printed to stdout:
+
+```bash
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: Test Email
+From: sender@example.com
+To: recipient@example.com
+
+This is a test email.
+```
+
+### File Backend (Testing)
+
+```python settings.py
+# Save emails to files
+EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+EMAIL_FILE_PATH = '/tmp/app-emails'
+```
+
+### Memory Backend (Testing)
+
+```python settings.py
+# Store emails in memory (useful for tests)
+EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+```
+
+Access sent emails in tests:
+
+```python tests.py
+from django.core import mail
+
+def test_email_sent(self):
+    # Send email
+    send_mail('Subject', 'Message', 'from@example.com', ['to@example.com'])
+    
+    # Check email was sent
+    self.assertEqual(len(mail.outbox), 1)
+    self.assertEqual(mail.outbox[0].subject, 'Subject')
+```
+
+## Sending Emails
+
+### Simple Text Email
+
+```python
+from django.core.mail import send_mail
+
+send_mail(
+    subject='Welcome to Our Site',
+    message='Thanks for signing up!',
+    from_email='noreply@example.com',
+    recipient_list=['user@example.com'],
+    fail_silently=False,  # Raise exceptions on errors
+)
+```
+
+### HTML Email
+
+```python
+from django.core.mail import send_mail
+
+send_mail(
+    subject='Welcome!',
+    message='Plain text version',  # Fallback for non-HTML clients
+    from_email='noreply@example.com',
+    recipient_list=['user@example.com'],
+    html_message='<h1>Welcome!</h1><p>Thanks for signing up!</p>',
+)
+```
+
+### EmailMessage Class
+
+For more control, use `EmailMessage`:
+
+```python
+from django.core.mail import EmailMessage
+
+email = EmailMessage(
+    subject='Order Confirmation',
+    body='Your order has been confirmed.',
+    from_email='orders@example.com',
+    to=['customer@example.com'],
+    bcc=['archive@example.com'],
+    cc=['manager@example.com'],
+    reply_to=['support@example.com'],
+    headers={'Message-ID': 'unique-id-123'},
+)
+
+# Send the email
+email.send()
+```
+
+### HTML Emails with Alternatives
+
+```python
+from django.core.mail import EmailMultiAlternatives
+
+subject = 'Welcome'
+text_content = 'Thanks for signing up!'
+html_content = '<p>Thanks for <strong>signing up</strong>!</p>'
+
+email = EmailMultiAlternatives(
+    subject=subject,
+    body=text_content,
+    from_email='noreply@example.com',
+    to=['user@example.com'],
+)
+
+email.attach_alternative(html_content, 'text/html')
+email.send()
+```
+
+## Attachments
+
+### Attach Files
+
+```python
+from django.core.mail import EmailMessage
+
+email = EmailMessage(
+    subject='Invoice',
+    body='Please find your invoice attached.',
+    from_email='billing@example.com',
+    to=['customer@example.com'],
+)
+
+# Attach file from filesystem
+email.attach_file('/path/to/invoice.pdf')
+
+# Attach file from memory
+with open('/path/to/file.pdf', 'rb') as f:
+    email.attach('document.pdf', f.read(), 'application/pdf')
+
+email.send()
+```
+
+### Attach Multiple Files
+
+```python
+email = EmailMessage(
+    subject='Monthly Report',
+    body='Reports attached.',
+    from_email='reports@example.com',
+    to=['manager@example.com'],
+)
+
+# Attach multiple files
+email.attach_file('report.pdf')
+email.attach_file('data.xlsx')
+email.attach_file('chart.png')
+
+email.send()
+```
+
+### Inline Images
+
+```python
+from django.core.mail import EmailMultiAlternatives
+from email.mime.image import MIMEImage
+
+email = EmailMultiAlternatives(
+    subject='Newsletter',
+    body='Plain text version',
+    from_email='news@example.com',
+    to=['subscriber@example.com'],
+)
+
+html_content = '''
+<html>
+  <body>
+    <h1>Newsletter</h1>
+    <img src="cid:logo" alt="Logo">
+  </body>
+</html>
+'''
+
+email.attach_alternative(html_content, 'text/html')
+
+# Attach image as inline
+with open('logo.png', 'rb') as f:
+    img = MIMEImage(f.read())
+    img.add_header('Content-ID', '<logo>')
+    email.attach(img)
+
+email.send()
+```
+
+## Mass Mailing
+
+### Send Multiple Emails Efficiently
+
+```python
+from django.core.mail import send_mass_mail
+
+message1 = (
+    'Subject 1',
+    'Message 1',
+    'from@example.com',
+    ['recipient1@example.com'],
+)
+
+message2 = (
+    'Subject 2',
+    'Message 2',
+    'from@example.com',
+    ['recipient2@example.com'],
+)
+
+message3 = (
+    'Subject 3',
+    'Message 3',
+    'from@example.com',
+    ['recipient3@example.com'],
+)
+
+# Send all messages using a single SMTP connection
+send_mass_mail((message1, message2, message3), fail_silently=False)
+```
+
+### Using Email Connection
+
+```python
+from django.core.mail import get_connection, EmailMessage
+
+# Open connection once
+connection = get_connection()
+connection.open()
+
+# Send multiple emails
+email1 = EmailMessage('Subject 1', 'Body 1', to=['user1@example.com'], connection=connection)
+email2 = EmailMessage('Subject 2', 'Body 2', to=['user2@example.com'], connection=connection)
+email3 = EmailMessage('Subject 3', 'Body 3', to=['user3@example.com'], connection=connection)
+
+# Send all at once
+connection.send_messages([email1, email2, email3])
+
+# Close connection
+connection.close()
+```
+
+## Template-Based Emails
+
+### Using Django Templates
+
+```python views.py
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+
+def send_welcome_email(user):
+    # Render HTML content
+    html_content = render_to_string('emails/welcome.html', {
+        'user': user,
+        'activation_link': 'https://example.com/activate/...',
+    })
+    
+    # Create plain text version
+    text_content = strip_tags(html_content)
+    
+    # Send email
+    email = EmailMultiAlternatives(
+        subject='Welcome to Our Site',
+        body=text_content,
+        from_email='noreply@example.com',
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, 'text/html')
+    email.send()
+```
+
+```django emails/welcome.html
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .button { background-color: #4CAF50; color: white; padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>Welcome, {{ user.get_full_name }}!</h1>
+    <p>Thanks for joining our community.</p>
+    <a href="{{ activation_link }}" class="button">Activate Your Account</a>
+</body>
+</html>
+```
+
+## Email to Admins
+
+```python settings.py
+ADMINS = [
+    ('Admin Name', 'admin@example.com'),
+    ('Another Admin', 'admin2@example.com'),
+]
+
+MANAGERS = ADMINS
+
+SERVER_EMAIL = 'server@example.com'
+EMAIL_SUBJECT_PREFIX = '[Django] '
+```
+
+```python
+from django.core.mail import mail_admins, mail_managers
+
+# Email all admins
+mail_admins(
+    subject='Server Error',
+    message='An error occurred...',
+    fail_silently=False,
+)
+
+# Email all managers
+mail_managers(
+    subject='Important Notice',
+    message='Please review...',
+)
+```
+
+## Error Handling
+
+```python
+from django.core.mail import send_mail
+from smtplib import SMTPException
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    send_mail(
+        subject='Test',
+        message='Message',
+        from_email='from@example.com',
+        recipient_list=['to@example.com'],
+        fail_silently=False,
+    )
+except SMTPException as e:
+    logger.error(f'Email failed to send: {e}')
+    # Handle error (retry, notify admin, etc.)
+except Exception as e:
+    logger.error(f'Unexpected error: {e}')
+```
+
+## Testing Emails
+
+```python tests.py
+from django.test import TestCase
+from django.core import mail
+
+class EmailTestCase(TestCase):
+    def test_send_email(self):
+        # Clear outbox
+        mail.outbox = []
+        
+        # Send email
+        mail.send_mail(
+            'Subject',
+            'Message',
+            'from@example.com',
+            ['to@example.com'],
+        )
+        
+        # Test that one message has been sent
+        self.assertEqual(len(mail.outbox), 1)
+        
+        # Verify email content
+        email = mail.outbox[0]
+        self.assertEqual(email.subject, 'Subject')
+        self.assertEqual(email.body, 'Message')
+        self.assertEqual(email.from_email, 'from@example.com')
+        self.assertEqual(email.to, ['to@example.com'])
+    
+    def test_html_email(self):
+        from django.core.mail import EmailMultiAlternatives
+        
+        email = EmailMultiAlternatives(
+            'Subject',
+            'Text content',
+            'from@example.com',
+            ['to@example.com'],
+        )
+        email.attach_alternative('<p>HTML content</p>', 'text/html')
+        email.send()
+        
+        # Check HTML alternative was attached
+        self.assertEqual(len(mail.outbox), 1)
+        sent_email = mail.outbox[0]
+        self.assertTrue(sent_email.body_contains('Text content'))
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Environment Variables">
+    Never hardcode credentials in settings:
+    
+    ```python settings.py
+    import os
+    
+    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+    ```
+  </Step>
+  
+  <Step title="Use Celery for Async Sending">
+    Send emails asynchronously to avoid blocking requests:
+    
+    ```python tasks.py
+    from celery import shared_task
+    from django.core.mail import send_mail
+    
+    @shared_task
+    def send_email_task(subject, message, recipient_list):
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email='noreply@example.com',
+            recipient_list=recipient_list,
+        )
+    ```
+  </Step>
+  
+  <Step title="Include Plain Text Versions">
+    Always provide plain text alternatives for HTML emails.
+  </Step>
+  
+  <Step title="Handle Failures Gracefully">
+    Use `fail_silently=False` in development, log errors in production.
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### User Registration Email
+
+```python
+def send_registration_email(user, activation_token):
+    activation_link = f'https://example.com/activate/{activation_token}'
+    
+    send_mail(
+        subject='Activate Your Account',
+        message=f'Click this link to activate: {activation_link}',
+        from_email='noreply@example.com',
+        recipient_list=[user.email],
+    )
+```
+
+### Password Reset Email
+
+```python
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+
+def send_password_reset_email(user):
+    token = default_token_generator.make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    reset_link = f'https://example.com/reset/{uid}/{token}/'
+    
+    send_mail(
+        subject='Password Reset Request',
+        message=f'Click here to reset your password: {reset_link}',
+        from_email='noreply@example.com',
+        recipient_list=[user.email],
+    )
+```
+
+<Warning>
+  Always use HTTPS for links containing sensitive tokens.
+</Warning>
+
+## Related Resources
+
+- [Email Settings Reference](/configuration/email)
+- [Email Backends](/api-reference/mail/backends)
+- [Testing Email](/testing/email)

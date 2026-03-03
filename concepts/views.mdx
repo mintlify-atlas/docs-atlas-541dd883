@@ -1,0 +1,447 @@
+---
+title: 'Views'
+description: 'Handle HTTP requests and return responses using function-based and class-based views'
+---
+
+## Overview
+
+Views are Python functions or classes that receive HTTP requests and return HTTP responses. They contain the business logic that processes data and determines what to display.
+
+<Note>
+  Views act as the controller in Django's MVT architecture, bridging models (data) and templates (presentation).
+</Note>
+
+## Function-Based Views (FBV)
+
+The simplest way to create views is with functions:
+
+```python
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render, get_object_or_404
+from .models import Article
+
+def article_list(request):
+    """Display list of all articles"""
+    articles = Article.objects.filter(status='published')
+    return render(request, 'articles/list.html', {
+        'articles': articles
+    })
+
+def article_detail(request, pk):
+    """Display single article"""
+    article = get_object_or_404(Article, pk=pk)
+    return render(request, 'articles/detail.html', {
+        'article': article
+    })
+
+def article_json(request, pk):
+    """Return article as JSON"""
+    article = get_object_or_404(Article, pk=pk)
+    return JsonResponse({
+        'id': article.id,
+        'title': article.title,
+        'content': article.content,
+    })
+```
+
+### Request Object
+
+The `request` parameter contains all request information:
+
+```python
+def my_view(request):
+    # HTTP method
+    if request.method == 'POST':
+        # POST data
+        title = request.POST.get('title')
+        
+        # Files
+        uploaded_file = request.FILES.get('document')
+    
+    # GET parameters
+    search_query = request.GET.get('q', '')
+    
+    # Headers
+    user_agent = request.META.get('HTTP_USER_AGENT')
+    
+    # User information
+    if request.user.is_authenticated:
+        username = request.user.username
+    
+    # Session data
+    request.session['last_visit'] = str(datetime.now())
+    
+    # Cookies
+    visitor_id = request.COOKIES.get('visitor_id')
+    
+    return HttpResponse('Processed')
+```
+
+### Response Types
+
+```python
+from django.http import (
+    HttpResponse,
+    JsonResponse,
+    HttpResponseRedirect,
+    HttpResponseNotFound,
+    HttpResponseForbidden,
+    FileResponse,
+)
+from django.shortcuts import redirect
+
+def various_responses(request):
+    # Plain text
+    return HttpResponse('Hello, World!')
+    
+    # HTML with status code
+    return HttpResponse('<h1>Created</h1>', status=201)
+    
+    # JSON response
+    return JsonResponse({'status': 'success', 'data': [1, 2, 3]})
+    
+    # Redirect to URL
+    return HttpResponseRedirect('/success/')
+    
+    # Redirect using name
+    return redirect('article-detail', pk=1)
+    
+    # 404 Not Found
+    return HttpResponseNotFound('Page not found')
+    
+    # File download
+    file = open('document.pdf', 'rb')
+    return FileResponse(file, as_attachment=True, filename='document.pdf')
+```
+
+## Class-Based Views (CBV)
+
+From `django.views.generic.base`, class-based views provide reusable functionality:
+
+### Basic View Class
+
+```python
+from django.views import View
+from django.http import HttpResponse
+from django.shortcuts import render
+
+class ArticleListView(View):
+    """List articles with different HTTP methods"""
+    
+    def get(self, request, *args, **kwargs):
+        """Handle GET requests"""
+        articles = Article.objects.all()
+        return render(request, 'articles/list.html', {
+            'articles': articles
+        })
+    
+    def post(self, request, *args, **kwargs):
+        """Handle POST requests"""
+        # Create new article
+        title = request.POST.get('title')
+        article = Article.objects.create(title=title)
+        return HttpResponse(f'Article created: {article.id}')
+```
+
+The `View` class uses the `dispatch()` method to route requests to appropriate HTTP method handlers:
+
+```python
+# From django.views.generic.base.View
+def dispatch(self, request, *args, **kwargs):
+    """Route to method handler based on request.method"""
+    method = request.method.lower()
+    if method in self.http_method_names:
+        handler = getattr(self, method, self.http_method_not_allowed)
+    else:
+        handler = self.http_method_not_allowed
+    return handler(request, *args, **kwargs)
+```
+
+### URL Integration
+
+```python
+# urls.py
+from django.urls import path
+from .views import ArticleListView
+
+urlpatterns = [
+    # Use as_view() to convert CBV to function
+    path('articles/', ArticleListView.as_view(), name='article-list'),
+]
+```
+
+<Tip>
+  The `as_view()` class method creates a view function that instantiates the class and calls `dispatch()`. This is the bridge between URL routing and class-based views.
+</Tip>
+
+## Generic Views
+
+Django provides generic views for common patterns:
+
+### Display Views
+
+```python
+from django.views.generic import ListView, DetailView
+
+class ArticleListView(ListView):
+    """Display list of articles with pagination"""
+    model = Article
+    template_name = 'articles/list.html'
+    context_object_name = 'articles'
+    paginate_by = 10
+    ordering = ['-published_date']
+    
+    def get_queryset(self):
+        """Filter queryset"""
+        queryset = super().get_queryset()
+        return queryset.filter(status='published')
+    
+    def get_context_data(self, **kwargs):
+        """Add extra context"""
+        context = super().get_context_data(**kwargs)
+        context['total_count'] = Article.objects.count()
+        return context
+
+class ArticleDetailView(DetailView):
+    """Display single article"""
+    model = Article
+    template_name = 'articles/detail.html'
+    context_object_name = 'article'
+    
+    def get_object(self):
+        """Customize object retrieval"""
+        obj = super().get_object()
+        # Increment view count
+        obj.views += 1
+        obj.save()
+        return obj
+```
+
+### Editing Views
+
+```python
+from django.views.generic import CreateView, UpdateView, DeleteView
+from django.urls import reverse_lazy
+
+class ArticleCreateView(CreateView):
+    """Create new article"""
+    model = Article
+    fields = ['title', 'content', 'status']
+    template_name = 'articles/form.html'
+    success_url = reverse_lazy('article-list')
+    
+    def form_valid(self, form):
+        """Called when form is valid"""
+        form.instance.author = self.request.user
+        return super().form_valid(form)
+
+class ArticleUpdateView(UpdateView):
+    """Update existing article"""
+    model = Article
+    fields = ['title', 'content', 'status']
+    template_name = 'articles/form.html'
+    
+    def get_success_url(self):
+        return reverse_lazy('article-detail', kwargs={'pk': self.object.pk})
+
+class ArticleDeleteView(DeleteView):
+    """Delete article with confirmation"""
+    model = Article
+    template_name = 'articles/confirm_delete.html'
+    success_url = reverse_lazy('article-list')
+```
+
+<Warning>
+  Use `reverse_lazy()` instead of `reverse()` in class attributes to avoid circular import issues during URL resolution.
+</Warning>
+
+## Mixins
+
+Mixins add reusable functionality to class-based views:
+
+```python
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.views.generic import ListView, UpdateView
+
+class ArticleListView(LoginRequiredMixin, ListView):
+    """Require login to view articles"""
+    model = Article
+    login_url = '/login/'
+    redirect_field_name = 'next'
+
+class ArticleUpdateView(UserPassesTestMixin, UpdateView):
+    """Only author can edit article"""
+    model = Article
+    fields = ['title', 'content']
+    
+    def test_func(self):
+        """Check if user is article author"""
+        article = self.get_object()
+        return self.request.user == article.author
+```
+
+### Custom Mixins
+
+```python
+from django.views.generic.base import ContextMixin
+
+class PageTitleMixin(ContextMixin):
+    """Add page title to context"""
+    page_title = ''
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = self.get_page_title()
+        return context
+    
+    def get_page_title(self):
+        return self.page_title
+
+class ArticleListView(PageTitleMixin, ListView):
+    model = Article
+    page_title = 'All Articles'
+```
+
+## Async Views
+
+Django supports asynchronous views for better performance:
+
+```python
+from django.http import JsonResponse
+from django.views import View
+import httpx
+
+class AsyncArticleView(View):
+    """Async view for external API calls"""
+    
+    async def get(self, request, *args, **kwargs):
+        """Async GET handler"""
+        async with httpx.AsyncClient() as client:
+            response = await client.get('https://api.example.com/articles')
+            data = response.json()
+        
+        return JsonResponse({'articles': data})
+
+# Function-based async view
+async def async_article_list(request):
+    """Async function-based view"""
+    articles = await Article.objects.filter(status='published').aall()
+    return render(request, 'articles/list.html', {
+        'articles': articles
+    })
+```
+
+<Note>
+  From the View source code, all HTTP method handlers in a class must be consistently sync or async. Mixing sync and async handlers raises `ImproperlyConfigured`.
+</Note>
+
+## Decorators
+
+Decorators modify view behavior:
+
+```python
+from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.cache import cache_page
+from django.contrib.auth.decorators import login_required, permission_required
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def article_edit(request, pk):
+    article = get_object_or_404(Article, pk=pk)
+    # View logic
+    return render(request, 'articles/edit.html', {'article': article})
+
+@cache_page(60 * 15)  # Cache for 15 minutes
+def article_list(request):
+    articles = Article.objects.all()
+    return render(request, 'articles/list.html', {'articles': articles})
+
+@permission_required('articles.can_publish')
+def publish_article(request, pk):
+    article = get_object_or_404(Article, pk=pk)
+    article.status = 'published'
+    article.save()
+    return redirect('article-detail', pk=pk)
+```
+
+### Decorating Class-Based Views
+
+```python
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
+@method_decorator(csrf_exempt, name='dispatch')
+class APIView(View):
+    def post(self, request):
+        # CSRF exempt POST handler
+        return JsonResponse({'status': 'ok'})
+
+# Or decorate individual methods
+class ArticleView(View):
+    @method_decorator(login_required)
+    def get(self, request):
+        return render(request, 'article.html')
+```
+
+## Template Responses
+
+From `django.views.generic.base.TemplateResponseMixin`:
+
+```python
+from django.views.generic import TemplateView
+
+class AboutView(TemplateView):
+    """Simple template rendering"""
+    template_name = 'about.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['company_name'] = 'My Company'
+        context['year'] = datetime.now().year
+        return context
+```
+
+## Error Handling
+
+```python
+from django.http import Http404
+from django.core.exceptions import PermissionDenied
+
+def article_detail(request, pk):
+    try:
+        article = Article.objects.get(pk=pk)
+    except Article.DoesNotExist:
+        raise Http404('Article not found')
+    
+    if not article.is_published and request.user != article.author:
+        raise PermissionDenied('You cannot view this article')
+    
+    return render(request, 'articles/detail.html', {'article': article})
+
+# Custom error views
+def handler404(request, exception):
+    return render(request, '404.html', status=404)
+
+def handler500(request):
+    return render(request, '500.html', status=500)
+```
+
+## Best Practices
+
+1. **Use generic views**: Leverage Django's built-in generic views for common patterns
+2. **Keep views thin**: Move business logic to models or service layers
+3. **Use shortcuts**: Utilize `render()`, `get_object_or_404()`, `redirect()`
+4. **Handle errors gracefully**: Catch exceptions and return appropriate responses
+5. **Validate input**: Always validate and sanitize user input
+6. **Use mixins**: Compose functionality with mixins instead of deep inheritance
+
+<Warning>
+  Avoid putting database queries in loops. Use `select_related()` and `prefetch_related()` to optimize database access.
+</Warning>
+
+## Next Steps
+
+- Learn about [Templates](/concepts/templates) for rendering HTML
+- Explore [Forms](/concepts/forms) for handling user input
+- Master [URL Routing](/concepts/urls) for mapping URLs to views
+- Understand [Middleware](/concepts/middleware) for request/response processing

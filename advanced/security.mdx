@@ -1,0 +1,536 @@
+---
+title: "Security Features"
+description: "Learn about Django's built-in security protections including CSRF, XSS prevention, SQL injection protection, and security middleware"
+---
+
+## Introduction
+
+Django provides robust security features out of the box to protect against common web vulnerabilities. Understanding and properly configuring these features is essential for building secure applications.
+
+## CSRF Protection
+
+Cross-Site Request Forgery (CSRF) protection prevents malicious sites from executing unauthorized actions on behalf of authenticated users.
+
+### How CSRF Protection Works
+
+Django uses a middleware-based approach with tokens:
+
+1. A secret CSRF token is generated for each user session
+2. The token is included in forms and validated on submission
+3. Requests without valid tokens are rejected
+
+### Using CSRF Protection
+
+```django
+<!-- In templates -->
+<form method="post">
+    {% csrf_token %}
+    <input type="text" name="username">
+    <button type="submit">Submit</button>
+</form>
+```
+
+### CSRF Decorators
+
+From Django source (`django/views/decorators/csrf.py`):
+
+```python
+from django.middleware.csrf import CsrfViewMiddleware, get_token
+from django.utils.decorators import decorator_from_middleware
+from functools import wraps
+from inspect import iscoroutinefunction
+
+# Enforce CSRF protection
+csrf_protect = decorator_from_middleware(CsrfViewMiddleware)
+csrf_protect.__name__ = "csrf_protect"
+csrf_protect.__doc__ = """
+This decorator adds CSRF protection in exactly the same way as
+CsrfViewMiddleware, but it can be used on a per view basis. Using both, or
+using the decorator multiple times, is harmless and efficient.
+"""
+
+# Ensure CSRF token is available
+class _EnsureCsrfToken(CsrfViewMiddleware):
+    def _reject(self, request, reason):
+        return None
+
+requires_csrf_token = decorator_from_middleware(_EnsureCsrfToken)
+
+# Ensure CSRF cookie is set
+class _EnsureCsrfCookie(CsrfViewMiddleware):
+    def _reject(self, request, reason):
+        return None
+    
+    def process_view(self, request, callback, callback_args, callback_kwargs):
+        retval = super().process_view(request, callback, callback_args, callback_kwargs)
+        get_token(request)  # Force process_response to send the cookie
+        return retval
+
+ensure_csrf_cookie = decorator_from_middleware(_EnsureCsrfCookie)
+
+# Exempt view from CSRF protection
+def csrf_exempt(view_func):
+    """Mark a view function as being exempt from the CSRF view protection."""
+    if iscoroutinefunction(view_func):
+        async def _view_wrapper(request, *args, **kwargs):
+            return await view_func(request, *args, **kwargs)
+    else:
+        def _view_wrapper(request, *args, **kwargs):
+            return view_func(request, *args, **kwargs)
+    
+    _view_wrapper.csrf_exempt = True
+    return wraps(view_func)(_view_wrapper)
+```
+
+### Using CSRF Decorators
+
+```python
+from django.views.decorators.csrf import csrf_protect, csrf_exempt, ensure_csrf_cookie
+
+# Enforce CSRF on specific view
+@csrf_protect
+def my_view(request):
+    return render(request, 'template.html')
+
+# Exempt API endpoint from CSRF
+@csrf_exempt
+def api_endpoint(request):
+    # For public APIs or when using token authentication
+    return JsonResponse({'status': 'ok'})
+
+# Ensure CSRF cookie is set (for AJAX)
+@ensure_csrf_cookie
+def set_csrf_cookie(request):
+    return render(request, 'page_with_ajax.html')
+
+# Async views are supported
+@csrf_exempt
+async def async_api(request):
+    return JsonResponse({'data': 'async'})
+```
+
+### AJAX and CSRF
+
+```javascript
+// Get CSRF token from cookie
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+// Include in AJAX requests
+fetch('/api/endpoint/', {
+    method: 'POST',
+    headers: {
+        'X-CSRFToken': csrftoken,
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({data: 'value'})
+});
+```
+
+<Warning>
+Never disable CSRF protection globally. Only use `@csrf_exempt` on specific views that truly don't need it (like public APIs with alternative authentication).
+</Warning>
+
+## XSS Prevention
+
+Cross-Site Scripting (XSS) attacks inject malicious scripts into web pages. Django automatically escapes content in templates.
+
+### Template Auto-Escaping
+
+```django
+<!-- Django automatically escapes variables -->
+<p>{{ user_input }}</p>  <!-- Safe: HTML is escaped -->
+
+<!-- If user_input = "<script>alert('XSS')</script>" -->
+<!-- Renders as: &lt;script&gt;alert(&#x27;XSS&#x27;)&lt;/script&gt; -->
+
+<!-- Mark content as safe (use with caution!) -->
+<p>{{ trusted_html|safe }}</p>
+
+<!-- Disable auto-escaping for a block -->
+{% autoescape off %}
+    {{ potentially_dangerous_content }}
+{% endautoescape %}
+```
+
+### Safe String Handling
+
+```python
+from django.utils.safestring import mark_safe
+from django.utils.html import escape, format_html
+
+def my_view(request):
+    user_input = request.GET.get('input', '')
+    
+    # BAD: Don't do this
+    unsafe_html = f"<p>{user_input}</p>"
+    
+    # GOOD: Escape user input
+    safe_html = format_html("<p>{}</p>", user_input)
+    
+    # GOOD: Escape manually
+    escaped = escape(user_input)
+    
+    # Mark as safe only if you're sure it's safe
+    trusted = mark_safe("<strong>Admin Message</strong>")
+    
+    return render(request, 'template.html', {
+        'safe_html': safe_html,
+        'escaped': escaped,
+        'trusted': trusted,
+    })
+```
+
+### JSON and XSS
+
+```python
+from django.http import JsonResponse
+import json
+
+def api_view(request):
+    # JsonResponse automatically escapes content
+    data = {
+        'message': '<script>alert("XSS")</script>',
+        'user': request.user.username
+    }
+    return JsonResponse(data)  # Safe
+
+# In templates, use the json_script filter
+```
+
+```django
+{{ data|json_script:"user-data" }}
+<script>
+    const data = JSON.parse(document.getElementById('user-data').textContent);
+</script>
+```
+
+<Tip>
+Always use Django's template system and `format_html()` for generating HTML. Never concatenate user input directly into HTML strings.
+</Tip>
+
+## SQL Injection Protection
+
+Django's ORM automatically protects against SQL injection by using parameterized queries.
+
+### Safe ORM Queries
+
+```python
+from myapp.models import Article
+
+# SAFE: ORM automatically parameterizes
+articles = Article.objects.filter(title=user_input)
+articles = Article.objects.filter(author__username=username)
+articles = Article.objects.raw(
+    "SELECT * FROM myapp_article WHERE title = %s",
+    [user_input]  # Parameters are safely escaped
+)
+
+# SAFE: Using extra() with params
+articles = Article.objects.extra(
+    where=["title = %s"],
+    params=[user_input]
+)
+```
+
+### Dangerous Patterns to Avoid
+
+```python
+# DANGEROUS: String formatting in raw SQL
+Article.objects.raw(f"SELECT * FROM myapp_article WHERE title = '{user_input}'")
+
+# DANGEROUS: String concatenation
+Article.objects.raw("SELECT * FROM myapp_article WHERE title = '" + user_input + "'")
+
+# SAFE Alternative: Use parameters
+Article.objects.raw(
+    "SELECT * FROM myapp_article WHERE title = %s",
+    [user_input]
+)
+```
+
+### Direct Database Access
+
+```python
+from django.db import connection
+
+# SAFE: Use parameterized queries
+with connection.cursor() as cursor:
+    cursor.execute(
+        "SELECT * FROM myapp_article WHERE author_id = %s AND published = %s",
+        [author_id, True]
+    )
+    rows = cursor.fetchall()
+
+# DANGEROUS: Never do this
+with connection.cursor() as cursor:
+    cursor.execute(f"SELECT * FROM myapp_article WHERE title = '{user_input}'")
+```
+
+<Warning>
+Never use string formatting or concatenation to build SQL queries. Always use the ORM or parameterized queries.
+</Warning>
+
+## Clickjacking Protection
+
+Clickjacking tricks users into clicking on something different from what they perceive. Django provides middleware and decorators for protection.
+
+### X-Frame-Options Middleware
+
+```python
+# settings.py
+MIDDLEWARE = [
+    # ...
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+# Default setting
+X_FRAME_OPTIONS = 'DENY'  # Don't allow any framing
+# X_FRAME_OPTIONS = 'SAMEORIGIN'  # Allow framing from same origin
+```
+
+### Per-View Control
+
+```python
+from django.views.decorators.clickjacking import (
+    xframe_options_deny,
+    xframe_options_sameorigin,
+    xframe_options_exempt
+)
+
+@xframe_options_deny
+def secure_view(request):
+    # Cannot be framed at all
+    return render(request, 'secure.html')
+
+@xframe_options_sameorigin
+def embeddable_view(request):
+    # Can be framed by same origin
+    return render(request, 'embed.html')
+
+@xframe_options_exempt
+def widget_view(request):
+    # No X-Frame-Options header
+    return render(request, 'widget.html')
+```
+
+## Security Middleware
+
+Django's `SecurityMiddleware` provides several security enhancements.
+
+From Django source (`django/middleware/security.py`):
+
+```python
+import re
+from django.conf import settings
+from django.http import HttpResponsePermanentRedirect
+from django.utils.deprecation import MiddlewareMixin
+
+class SecurityMiddleware(MiddlewareMixin):
+    def __init__(self, get_response):
+        super().__init__(get_response)
+        self.sts_seconds = settings.SECURE_HSTS_SECONDS
+        self.sts_include_subdomains = settings.SECURE_HSTS_INCLUDE_SUBDOMAINS
+        self.sts_preload = settings.SECURE_HSTS_PRELOAD
+        self.content_type_nosniff = settings.SECURE_CONTENT_TYPE_NOSNIFF
+        self.redirect = settings.SECURE_SSL_REDIRECT
+        self.redirect_host = settings.SECURE_SSL_HOST
+        self.redirect_exempt = [re.compile(r) for r in settings.SECURE_REDIRECT_EXEMPT]
+        self.referrer_policy = settings.SECURE_REFERRER_POLICY
+        self.cross_origin_opener_policy = settings.SECURE_CROSS_ORIGIN_OPENER_POLICY
+    
+    def process_request(self, request):
+        path = request.path.lstrip("/")
+        if (
+            self.redirect
+            and not request.is_secure()
+            and not any(pattern.search(path) for pattern in self.redirect_exempt)
+        ):
+            host = self.redirect_host or request.get_host()
+            return HttpResponsePermanentRedirect(
+                "https://%s%s" % (host, request.get_full_path())
+            )
+    
+    def process_response(self, request, response):
+        # Strict-Transport-Security header
+        if (
+            self.sts_seconds
+            and request.is_secure()
+            and "Strict-Transport-Security" not in response
+        ):
+            sts_header = "max-age=%s" % self.sts_seconds
+            if self.sts_include_subdomains:
+                sts_header += "; includeSubDomains"
+            if self.sts_preload:
+                sts_header += "; preload"
+            response.headers["Strict-Transport-Security"] = sts_header
+        
+        # X-Content-Type-Options header
+        if self.content_type_nosniff:
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        
+        # Referrer-Policy header
+        if self.referrer_policy:
+            response.headers.setdefault(
+                "Referrer-Policy",
+                ",".join(
+                    [v.strip() for v in self.referrer_policy.split(",")]
+                    if isinstance(self.referrer_policy, str)
+                    else self.referrer_policy
+                ),
+            )
+        
+        # Cross-Origin-Opener-Policy header
+        if self.cross_origin_opener_policy:
+            response.setdefault(
+                "Cross-Origin-Opener-Policy",
+                self.cross_origin_opener_policy,
+            )
+        
+        return response
+```
+
+### Security Settings
+
+```python
+# settings.py
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    # ... other middleware
+]
+
+# HTTPS/SSL Settings
+SECURE_SSL_REDIRECT = True  # Redirect all HTTP to HTTPS
+SECURE_SSL_HOST = None  # Custom host for redirects
+SECURE_REDIRECT_EXEMPT = []  # Paths exempt from HTTPS redirect
+
+# HSTS (HTTP Strict Transport Security)
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# Content Security
+SECURE_CONTENT_TYPE_NOSNIFF = True  # Prevent MIME-sniffing
+
+# Referrer Policy
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+# Cross-Origin Opener Policy
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+
+# Cookie Security
+SESSION_COOKIE_SECURE = True  # Send session cookie only over HTTPS
+CSRF_COOKIE_SECURE = True  # Send CSRF cookie only over HTTPS
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie
+SESSION_COOKIE_SAMESITE = 'Strict'  # Restrict cookie to same-site requests
+CSRF_COOKIE_SAMESITE = 'Strict'
+```
+
+<Note>
+In development, set `SECURE_SSL_REDIRECT = False` since you're typically not using HTTPS locally.
+</Note>
+
+## Content Security Policy
+
+```python
+# settings.py
+
+# Using django-csp package
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "cdn.example.com")
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'")
+CSP_IMG_SRC = ("'self'", "data:", "https:")
+CSP_FONT_SRC = ("'self'", "fonts.googleapis.com")
+```
+
+```python
+# Per-view CSP
+from django.views.decorators.csp import csp_update, csp_replace
+
+@csp_update(SCRIPT_SRC=["'self'", "trusted-cdn.com"])
+def my_view(request):
+    return render(request, 'template.html')
+```
+
+## Password Security
+
+```python
+# settings.py
+
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 12,
+        }
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
+
+# Password hashing
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
+```
+
+## Security Checklist
+
+<Tip>
+**Production Security Checklist:**
+
+1. **HTTPS Everywhere**: Set `SECURE_SSL_REDIRECT = True`
+2. **HSTS**: Enable with `SECURE_HSTS_SECONDS = 31536000`
+3. **Secure Cookies**: Set `SESSION_COOKIE_SECURE = True` and `CSRF_COOKIE_SECURE = True`
+4. **DEBUG Off**: Always `DEBUG = False` in production
+5. **Secret Key**: Use strong, random `SECRET_KEY` and keep it secret
+6. **Allowed Hosts**: Restrict `ALLOWED_HOSTS` to your domains
+7. **CSRF Protection**: Never disable globally
+8. **SQL Injection**: Use ORM and parameterized queries only
+9. **XSS Protection**: Use Django templates, never `mark_safe` user input
+10. **Password Security**: Use strong validation and Argon2 hashing
+</Tip>
+
+## Security Command
+
+```bash
+# Check security settings
+python manage.py check --deploy
+```
+
+This command checks for common security issues in production settings.
+
+<Warning>
+**Never commit secrets to version control!** Use environment variables or secret management services for:
+- `SECRET_KEY`
+- Database passwords
+- API keys
+- OAuth secrets
+</Warning>

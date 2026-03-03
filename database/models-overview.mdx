@@ -1,0 +1,435 @@
+---
+title: 'Model Basics'
+description: 'Learn how to define Django models, use Meta options, and create custom model methods'
+---
+
+## Introduction to Models
+
+Models are the single, definitive source of information about your data in Django. They contain the essential fields and behaviors of the data you're storing. Each model maps to a single database table.
+
+## Defining a Model
+
+Models are Python classes that subclass `django.db.models.Model`. Each attribute of the model represents a database field.
+
+```python
+from django.db import models
+
+class Person(models.Model):
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+    email = models.EmailField(unique=True)
+    date_of_birth = models.DateField()
+    is_active = models.BooleanField(default=True)
+```
+
+This creates a table with five fields. Django automatically adds an `id` field as the primary key.
+
+## Field Types
+
+Django provides many built-in field types from `django.db.models.fields`:
+
+```python
+from django.db import models
+
+class Article(models.Model):
+    # Text fields
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
+    content = models.TextField()
+    
+    # Numeric fields
+    view_count = models.IntegerField(default=0)
+    rating = models.DecimalField(max_digits=3, decimal_places=2)
+    
+    # Date/time fields
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    published_date = models.DateField(null=True, blank=True)
+    
+    # Boolean field
+    is_published = models.BooleanField(default=False)
+    
+    # File fields
+    cover_image = models.ImageField(upload_to='covers/', null=True)
+    attachment = models.FileField(upload_to='attachments/', null=True)
+    
+    # JSON field
+    metadata = models.JSONField(default=dict, blank=True)
+```
+
+<Note>
+The `auto_now_add` parameter sets the field to the current date/time when the object is first created, while `auto_now` updates it every time the object is saved.
+</Note>
+
+## Relationships
+
+Django provides three types of relationships: ForeignKey, ManyToManyField, and OneToOneField.
+
+### ForeignKey (Many-to-One)
+
+```python
+from django.db import models
+
+class Author(models.Model):
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+
+class Book(models.Model):
+    title = models.CharField(max_length=200)
+    author = models.ForeignKey(
+        Author,
+        on_delete=models.CASCADE,
+        related_name='books'
+    )
+    published_date = models.DateField()
+```
+
+<Warning>
+You must specify an `on_delete` option for ForeignKey fields. Common options include:
+- `CASCADE`: Delete related objects when the referenced object is deleted
+- `PROTECT`: Prevent deletion if related objects exist
+- `SET_NULL`: Set the field to NULL (requires `null=True`)
+- `SET_DEFAULT`: Set to the field's default value
+- `DO_NOTHING`: Take no action (may cause database integrity errors)
+</Warning>
+
+### ManyToManyField
+
+```python
+class Student(models.Model):
+    name = models.CharField(max_length=100)
+    
+class Course(models.Model):
+    name = models.CharField(max_length=100)
+    students = models.ManyToManyField(
+        Student,
+        related_name='courses',
+        blank=True
+    )
+```
+
+### OneToOneField
+
+```python
+class User(models.Model):
+    username = models.CharField(max_length=50, unique=True)
+    email = models.EmailField()
+
+class Profile(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profile'
+    )
+    bio = models.TextField(blank=True)
+    avatar = models.ImageField(upload_to='avatars/', null=True)
+```
+
+## Meta Options
+
+The `Meta` class inside a model provides metadata for the model. Based on Django's `Options` class in `/django/db/models/options.py`:
+
+```python
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_published = models.BooleanField(default=False)
+    view_count = models.IntegerField(default=0)
+    
+    class Meta:
+        # Verbose names for admin interface
+        verbose_name = "Article"
+        verbose_name_plural = "Articles"
+        
+        # Custom database table name
+        db_table = "blog_articles"
+        
+        # Table comment (PostgreSQL, MySQL, Oracle)
+        db_table_comment = "Stores all blog articles"
+        
+        # Default ordering
+        ordering = ['-created_at', 'title']
+        
+        # Indexes for performance
+        indexes = [
+            models.Index(fields=['title', 'created_at']),
+            models.Index(fields=['-view_count']),
+        ]
+        
+        # Constraints
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(view_count__gte=0),
+                name='view_count_positive'
+            ),
+            models.UniqueConstraint(
+                fields=['title', 'created_at'],
+                name='unique_title_per_day'
+            ),
+        ]
+        
+        # Permissions
+        permissions = [
+            ('can_publish', 'Can publish articles'),
+            ('can_feature', 'Can feature articles'),
+        ]
+        
+        # Default permissions
+        default_permissions = ('add', 'change', 'delete', 'view')
+        
+        # Get latest by field
+        get_latest_by = 'created_at'
+        
+        # Abstract base class
+        abstract = False
+        
+        # Managed by Django
+        managed = True
+```
+
+<Tip>
+Use `ordering` carefully - it adds an ORDER BY clause to every query. For better performance, apply ordering only when needed using `queryset.order_by()`.
+</Tip>
+
+### Common Meta Options
+
+| Option | Description |
+|--------|-------------|
+| `verbose_name` | Human-readable name for the object |
+| `verbose_name_plural` | Plural name for the object |
+| `db_table` | Custom database table name |
+| `ordering` | Default ordering for queries |
+| `indexes` | List of indexes to create |
+| `constraints` | Database constraints |
+| `unique_together` | Sets of fields that must be unique together |
+| `abstract` | Makes this an abstract base class |
+| `permissions` | Extra permissions for this object |
+| `get_latest_by` | Field(s) to use for `latest()` and `earliest()` |
+| `managed` | Whether Django manages the database table |
+
+## Model Methods
+
+You can define custom methods on models to add business logic:
+
+```python
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    view_count = models.IntegerField(default=0)
+    is_published = models.BooleanField(default=False)
+    
+    def __str__(self):
+        """String representation shown in admin and shell."""
+        return self.title
+    
+    def get_absolute_url(self):
+        """Returns the URL to access this article."""
+        from django.urls import reverse
+        return reverse('article-detail', args=[str(self.id)])
+    
+    def is_recent(self):
+        """Check if article was created within last 7 days."""
+        return self.created_at >= timezone.now() - timedelta(days=7)
+    
+    def increment_views(self):
+        """Increment the view count."""
+        self.view_count += 1
+        self.save(update_fields=['view_count'])
+    
+    def publish(self):
+        """Publish this article."""
+        self.is_published = True
+        self.save(update_fields=['is_published'])
+    
+    @property
+    def word_count(self):
+        """Calculate word count of content."""
+        return len(self.content.split())
+```
+
+<Note>
+The `__str__()` method is especially important - it defines what gets displayed in the Django admin and shell when you print an object.
+</Note>
+
+## Special Model Methods
+
+Django's `Model` class (from `/django/db/models/base.py`) provides several special methods:
+
+### save()
+
+Override `save()` to customize the saving behavior:
+
+```python
+from django.utils.text import slugify
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True, blank=True)
+    content = models.TextField()
+    
+    def save(self, *args, **kwargs):
+        # Auto-generate slug from title if not provided
+        if not self.slug:
+            self.slug = slugify(self.title)
+        
+        # Call the parent save method
+        super().save(*args, **kwargs)
+```
+
+<Warning>
+Always call `super().save(*args, **kwargs)` when overriding `save()`, otherwise the object won't be saved to the database.
+</Warning>
+
+### delete()
+
+Customize deletion behavior:
+
+```python
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    is_deleted = models.BooleanField(default=False)
+    
+    def delete(self, *args, **kwargs):
+        # Soft delete - mark as deleted instead of removing from database
+        self.is_deleted = True
+        self.save()
+```
+
+### clean()
+
+Add custom validation:
+
+```python
+from django.core.exceptions import ValidationError
+
+class Event(models.Model):
+    name = models.CharField(max_length=100)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    
+    def clean(self):
+        super().clean()
+        if self.end_date < self.start_date:
+            raise ValidationError('End date must be after start date')
+```
+
+## Model Inheritance
+
+### Abstract Base Classes
+
+```python
+class TimeStampedModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        abstract = True
+
+class Article(TimeStampedModel):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+    # Inherits created_at and updated_at fields
+```
+
+### Multi-table Inheritance
+
+```python
+class Place(models.Model):
+    name = models.CharField(max_length=100)
+    address = models.CharField(max_length=200)
+
+class Restaurant(Place):
+    # Inherits name and address
+    cuisine = models.CharField(max_length=50)
+    rating = models.DecimalField(max_digits=3, decimal_places=2)
+```
+
+## Model Managers
+
+Custom managers allow you to add custom QuerySet methods:
+
+```python
+from django.db import models
+
+class PublishedManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_published=True)
+
+class Article(models.Model):
+    title = models.CharField(max_length=200)
+    is_published = models.BooleanField(default=False)
+    
+    # Default manager
+    objects = models.Manager()
+    
+    # Custom manager
+    published = PublishedManager()
+
+# Usage:
+# Article.objects.all()  # All articles
+# Article.published.all()  # Only published articles
+```
+
+<Tip>
+The first manager defined on a model becomes the default manager. Be careful when changing the default manager as it affects related object access.
+</Tip>
+
+## Generated Fields (Django 5.0+)
+
+Generated fields are computed from other fields:
+
+```python
+from django.db import models
+from django.db.models import F, Value
+from django.db.models.functions import Lower, Concat
+
+class Person(models.Model):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    
+    # Database-generated field
+    full_name = models.GeneratedField(
+        expression=Concat('first_name', Value(' '), 'last_name'),
+        output_field=models.CharField(max_length=101),
+        db_persist=True
+    )
+```
+
+## Best Practices
+
+1. **Use meaningful field names**: Choose clear, descriptive names for your fields
+2. **Add help_text**: Provide documentation for fields that will appear in forms
+3. **Set appropriate defaults**: Use `default` parameter to avoid NULL values when possible
+4. **Use blank and null correctly**: 
+   - `blank=True`: Allows empty values in forms
+   - `null=True`: Allows NULL in the database
+5. **Keep models focused**: Each model should represent a single concept
+6. **Use abstract models**: For shared fields across multiple models
+7. **Override `__str__()`**: Always provide a useful string representation
+
+```python
+class Product(models.Model):
+    name = models.CharField(
+        max_length=200,
+        help_text="Product name as displayed to customers"
+    )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="Price in USD"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Optional product description"
+    )
+    
+    def __str__(self):
+        return f"{self.name} (${self.price})"
+```

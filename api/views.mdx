@@ -1,0 +1,563 @@
+---
+title: 'Views'
+description: 'Django class-based and generic views API reference'
+---
+
+## Base Views
+
+### View
+
+Base class for all class-based views.
+
+```python
+from django.views.generic import View
+
+class MyView(View):
+    def get(self, request, *args, **kwargs):
+        return HttpResponse('Hello')
+```
+
+**Class Attributes:**
+
+<ResponseField name="http_method_names" type="list">
+  List of supported HTTP methods: `['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace']`
+</ResponseField>
+
+**Methods:**
+
+#### as_view(\*\*initkwargs)
+
+Main entry point for a request-response process. Returns a callable view that takes a request and returns a response.
+
+<ParamField name="**initkwargs" type="dict">
+  Keyword arguments to set as instance attributes
+</ParamField>
+
+#### setup(request, \*args, \*\*kwargs)
+
+Initialize attributes shared by all view methods.
+
+<ParamField name="request" type="HttpRequest" required>
+  The HTTP request object
+</ParamField>
+
+<ParamField name="*args" type="tuple">
+  Positional URL arguments
+</ParamField>
+
+<ParamField name="**kwargs" type="dict">
+  Named URL arguments
+</ParamField>
+
+#### dispatch(request, \*args, \*\*kwargs)
+
+Dispatch to the right method based on the HTTP method.
+
+<ParamField name="request" type="HttpRequest" required>
+  The HTTP request object
+</ParamField>
+
+---
+
+### TemplateView
+
+Render a template with context from URL kwargs.
+
+```python
+from django.views.generic import TemplateView
+
+class AboutView(TemplateView):
+    template_name = "about.html"
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'About Us'
+        return context
+```
+
+**Class Attributes:**
+
+<ResponseField name="template_name" type="str">
+  The template to render
+</ResponseField>
+
+<ResponseField name="template_engine" type="str" optional>
+  The template engine to use
+</ResponseField>
+
+<ResponseField name="content_type" type="str" optional>
+  The content type for the response
+</ResponseField>
+
+<ResponseField name="extra_context" type="dict" optional>
+  Additional context data
+</ResponseField>
+
+**Methods:**
+
+#### get(request, \*args, \*\*kwargs)
+
+Handle GET requests.
+
+#### get_context_data(\*\*kwargs)
+
+Return context data for rendering the template.
+
+---
+
+### RedirectView
+
+Provide a redirect on any GET request.
+
+```python
+from django.views.generic import RedirectView
+
+class ArticleRedirectView(RedirectView):
+    pattern_name = 'article-detail'
+    permanent = False
+    query_string = True
+```
+
+**Class Attributes:**
+
+<ResponseField name="url" type="str" optional>
+  The URL to redirect to, with optional format string interpolation
+</ResponseField>
+
+<ResponseField name="pattern_name" type="str" optional>
+  The name of the URL pattern to redirect to
+</ResponseField>
+
+<ResponseField name="permanent" type="bool" default="False">
+  Whether the redirect should be permanent (301) or temporary (302)
+</ResponseField>
+
+<ResponseField name="query_string" type="bool" default="False">
+  Whether to pass the query string to the new location
+</ResponseField>
+
+**Methods:**
+
+#### get_redirect_url(\*args, \*\*kwargs)
+
+Return the URL to redirect to. Keyword arguments from URL pattern are provided as kwargs.
+
+---
+
+## Generic Display Views
+
+### ListView
+
+Render a list of objects.
+
+```python
+from django.views.generic import ListView
+from .models import Article
+
+class ArticleListView(ListView):
+    model = Article
+    paginate_by = 10
+    context_object_name = 'articles'
+    ordering = ['-published_date']
+```
+
+**Class Attributes:**
+
+<ResponseField name="model" type="Model" optional>
+  The model to query
+</ResponseField>
+
+<ResponseField name="queryset" type="QuerySet" optional>
+  The queryset to use (alternative to model)
+</ResponseField>
+
+<ResponseField name="paginate_by" type="int" optional>
+  Number of items per page
+</ResponseField>
+
+<ResponseField name="paginate_orphans" type="int" default="0">
+  Number of overflow items on last page
+</ResponseField>
+
+<ResponseField name="context_object_name" type="str" optional>
+  Context variable name for the object list
+</ResponseField>
+
+<ResponseField name="ordering" type="str | list" optional>
+  Field(s) to order queryset by
+</ResponseField>
+
+<ResponseField name="allow_empty" type="bool" default="True">
+  Whether to display the page if no objects exist (otherwise raises 404)
+</ResponseField>
+
+<ResponseField name="template_name_suffix" type="str" default="'_list'">
+  Suffix for auto-generated template name
+</ResponseField>
+
+**Methods:**
+
+#### get_queryset()
+
+Return the queryset for this view. Returns `queryset` if set, otherwise `model._default_manager.all()`.
+
+#### get_ordering()
+
+Return the field(s) to use for ordering the queryset.
+
+#### get_paginate_by(queryset)
+
+Get the number of items to paginate by, or `None` for no pagination.
+
+#### paginate_queryset(queryset, page_size)
+
+Paginate the queryset if needed. Returns a tuple of `(paginator, page, object_list, is_paginated)`.
+
+<ParamField name="queryset" type="QuerySet" required>
+  The queryset to paginate
+</ParamField>
+
+<ParamField name="page_size" type="int" required>
+  Number of items per page
+</ParamField>
+
+#### get_context_data(\*\*kwargs)
+
+Get the context for rendering. Includes `object_list`, `paginator`, `page_obj`, and `is_paginated`.
+
+---
+
+### DetailView
+
+Render a detail view of a single object.
+
+```python
+from django.views.generic import DetailView
+from .models import Article
+
+class ArticleDetailView(DetailView):
+    model = Article
+    context_object_name = 'article'
+```
+
+**Class Attributes:**
+
+<ResponseField name="model" type="Model" optional>
+  The model to query
+</ResponseField>
+
+<ResponseField name="queryset" type="QuerySet" optional>
+  The queryset to use (alternative to model)
+</ResponseField>
+
+<ResponseField name="slug_field" type="str" default="'slug'">
+  The model field name to use for slug lookup
+</ResponseField>
+
+<ResponseField name="slug_url_kwarg" type="str" default="'slug'">
+  The URL kwarg name containing the slug
+</ResponseField>
+
+<ResponseField name="pk_url_kwarg" type="str" default="'pk'">
+  The URL kwarg name containing the primary key
+</ResponseField>
+
+<ResponseField name="query_pk_and_slug" type="bool" default="False">
+  Whether to query both pk and slug
+</ResponseField>
+
+<ResponseField name="context_object_name" type="str" optional>
+  Context variable name for the object
+</ResponseField>
+
+<ResponseField name="template_name_suffix" type="str" default="'_detail'">
+  Suffix for auto-generated template name
+</ResponseField>
+
+**Methods:**
+
+#### get_object(queryset=None)
+
+Return the object the view is displaying. Requires a `pk` or `slug` argument in the URLconf.
+
+<ParamField name="queryset" type="QuerySet" optional>
+  Custom queryset to use for object lookup
+</ParamField>
+
+#### get_queryset()
+
+Return the queryset to use for object lookup.
+
+#### get_slug_field()
+
+Get the name of the slug field to be used to look up by slug.
+
+#### get_context_data(\*\*kwargs)
+
+Insert the single object into the context dict as `object` and by its context_object_name.
+
+---
+
+## Generic Edit Views
+
+### FormView
+
+Display a form and handle form submission.
+
+```python
+from django.views.generic import FormView
+from .forms import ContactForm
+
+class ContactView(FormView):
+    template_name = 'contact.html'
+    form_class = ContactForm
+    success_url = '/thanks/'
+    
+    def form_valid(self, form):
+        # Process form data
+        form.send_email()
+        return super().form_valid(form)
+```
+
+**Class Attributes:**
+
+<ResponseField name="form_class" type="Form" optional>
+  The form class to instantiate
+</ResponseField>
+
+<ResponseField name="initial" type="dict" default="{}">
+  Initial data for the form
+</ResponseField>
+
+<ResponseField name="success_url" type="str" optional>
+  URL to redirect to after successful form submission
+</ResponseField>
+
+<ResponseField name="prefix" type="str" optional>
+  Prefix for form fields
+</ResponseField>
+
+**Methods:**
+
+#### get_form_class()
+
+Return the form class to use.
+
+#### get_form(form_class=None)
+
+Return an instance of the form to be used in this view.
+
+#### get_initial()
+
+Return the initial data to use for forms on this view.
+
+#### get_form_kwargs()
+
+Return the keyword arguments for instantiating the form. Includes `initial`, `prefix`, and for POST/PUT requests: `data` and `files`.
+
+#### get_success_url()
+
+Return the URL to redirect to after processing a valid form.
+
+#### form_valid(form)
+
+Called when the form is valid. Default implementation redirects to `success_url`.
+
+<ParamField name="form" type="Form" required>
+  The valid form instance
+</ParamField>
+
+#### form_invalid(form)
+
+Called when the form is invalid. Re-renders the template with the form and errors.
+
+<ParamField name="form" type="Form" required>
+  The invalid form instance
+</ParamField>
+
+---
+
+### CreateView
+
+Display a form for creating an object and handle the form submission.
+
+```python
+from django.views.generic import CreateView
+from .models import Article
+
+class ArticleCreateView(CreateView):
+    model = Article
+    fields = ['title', 'content', 'author']
+    template_name = 'article_form.html'
+    success_url = '/articles/'
+```
+
+**Class Attributes:**
+
+<ResponseField name="model" type="Model" optional>
+  The model to create
+</ResponseField>
+
+<ResponseField name="form_class" type="ModelForm" optional>
+  The form class to use
+</ResponseField>
+
+<ResponseField name="fields" type="list" optional>
+  List of model fields to include in the form (required if form_class is not specified)
+</ResponseField>
+
+<ResponseField name="success_url" type="str" optional>
+  URL to redirect to after successful creation
+</ResponseField>
+
+<ResponseField name="template_name_suffix" type="str" default="'_form'">
+  Suffix for auto-generated template name
+</ResponseField>
+
+**Methods:**
+
+#### get_form_class()
+
+Return the form class to use. If `fields` is provided, creates a ModelForm automatically.
+
+#### form_valid(form)
+
+Save the form instance and redirect to success URL.
+
+<ParamField name="form" type="ModelForm" required>
+  The valid form instance
+</ParamField>
+
+#### get_success_url()
+
+Return the URL to redirect to. Uses `success_url` if set, otherwise calls `get_absolute_url()` on the saved object.
+
+---
+
+### UpdateView
+
+Display a form for editing an existing object and handle the form submission.
+
+```python
+from django.views.generic import UpdateView
+from .models import Article
+
+class ArticleUpdateView(UpdateView):
+    model = Article
+    fields = ['title', 'content']
+    template_name = 'article_form.html'
+```
+
+**Class Attributes:**
+
+<ResponseField name="model" type="Model" optional>
+  The model to update
+</ResponseField>
+
+<ResponseField name="form_class" type="ModelForm" optional>
+  The form class to use
+</ResponseField>
+
+<ResponseField name="fields" type="list" optional>
+  List of model fields to include in the form
+</ResponseField>
+
+<ResponseField name="queryset" type="QuerySet" optional>
+  Custom queryset for object lookup
+</ResponseField>
+
+<ResponseField name="slug_field" type="str" default="'slug'">
+  The model field name to use for slug lookup
+</ResponseField>
+
+<ResponseField name="slug_url_kwarg" type="str" default="'slug'">
+  The URL kwarg name containing the slug
+</ResponseField>
+
+<ResponseField name="pk_url_kwarg" type="str" default="'pk'">
+  The URL kwarg name containing the primary key
+</ResponseField>
+
+<ResponseField name="template_name_suffix" type="str" default="'_form'">
+  Suffix for auto-generated template name
+</ResponseField>
+
+**Methods:**
+
+#### get_object(queryset=None)
+
+Return the object to be updated.
+
+#### form_valid(form)
+
+Save the form instance and redirect to success URL.
+
+---
+
+### DeleteView
+
+Display a confirmation page and delete an object.
+
+```python
+from django.views.generic import DeleteView
+from django.urls import reverse_lazy
+from .models import Article
+
+class ArticleDeleteView(DeleteView):
+    model = Article
+    success_url = reverse_lazy('article-list')
+    template_name = 'article_confirm_delete.html'
+```
+
+**Class Attributes:**
+
+<ResponseField name="model" type="Model" optional>
+  The model to delete
+</ResponseField>
+
+<ResponseField name="success_url" type="str" required>
+  URL to redirect to after successful deletion
+</ResponseField>
+
+<ResponseField name="queryset" type="QuerySet" optional>
+  Custom queryset for object lookup
+</ResponseField>
+
+<ResponseField name="slug_field" type="str" default="'slug'">
+  The model field name to use for slug lookup
+</ResponseField>
+
+<ResponseField name="pk_url_kwarg" type="str" default="'pk'">
+  The URL kwarg name containing the primary key
+</ResponseField>
+
+<ResponseField name="template_name_suffix" type="str" default="'_confirm_delete'">
+  Suffix for auto-generated template name
+</ResponseField>
+
+**Methods:**
+
+#### get_object(queryset=None)
+
+Return the object to be deleted.
+
+#### delete(request, \*args, \*\*kwargs)
+
+Call the delete() method on the fetched object and redirect to the success URL.
+
+#### get_success_url()
+
+Return the URL to redirect to after successful deletion.
+
+---
+
+## Mixins
+
+Django provides several mixins that can be combined to create custom views:
+
+- **ContextMixin** - Provides `get_context_data()` and `extra_context`
+- **TemplateResponseMixin** - Renders templates using `template_name`
+- **SingleObjectMixin** - Provides single object retrieval via `get_object()`
+- **MultipleObjectMixin** - Provides queryset listing and pagination
+- **FormMixin** - Handles form display and processing
+- **ModelFormMixin** - Combines FormMixin with SingleObjectMixin for model forms

@@ -1,0 +1,579 @@
+---
+title: Cache Framework
+description: Low-level cache API for storing and retrieving cached data
+---
+
+## Overview
+
+Django's cache framework provides a flexible caching system with support for multiple backends. The cache API allows you to store, retrieve, and manage cached data.
+
+## Default Cache
+
+Access the default cache instance directly:
+
+```python
+from django.core.cache import cache
+```
+
+The `cache` object is a proxy to the default cache backend configured in `settings.CACHES`.
+
+## Cache Operations
+
+### cache.set()
+
+Sets a value in the cache.
+
+```python
+cache.set(key, value, timeout=DEFAULT_TIMEOUT, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key to store the value under
+</ParamField>
+
+<ParamField path="value" type="any" required>
+  The value to cache (must be picklable)
+</ParamField>
+
+<ParamField path="timeout" type="int | None" default="300">
+  Timeout in seconds. Use `None` for no expiration, `0` to delete immediately.
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+**Usage:**
+```python
+from django.core.cache import cache
+
+# Cache for 5 minutes (300 seconds)
+cache.set('my_key', 'my_value', 300)
+
+# Cache forever
+cache.set('permanent_key', 'value', None)
+
+# Cache complex objects
+cache.set('user_data', {'name': 'John', 'age': 30}, 3600)
+```
+
+### cache.get()
+
+Fetches a value from the cache.
+
+```python
+value = cache.get(key, default=None, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key to retrieve
+</ParamField>
+
+<ParamField path="default" type="any" default="None">
+  Value to return if key doesn't exist or has expired
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="any">
+  The cached value or the default if not found
+</ResponseField>
+
+**Usage:**
+```python
+value = cache.get('my_key')
+if value is None:
+    value = expensive_computation()
+    cache.set('my_key', value, 300)
+
+# With default
+value = cache.get('my_key', default='default_value')
+```
+
+### cache.add()
+
+Sets a value only if the key doesn't already exist.
+
+```python
+success = cache.add(key, value, timeout=DEFAULT_TIMEOUT, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key
+</ParamField>
+
+<ParamField path="value" type="any" required>
+  The value to cache
+</ParamField>
+
+<ParamField path="timeout" type="int | None" default="300">
+  Timeout in seconds
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  `True` if the value was stored, `False` if the key already existed
+</ResponseField>
+
+**Usage:**
+```python
+if cache.add('lock_key', 'locked', 60):
+    # Lock acquired, perform operation
+    try:
+        perform_operation()
+    finally:
+        cache.delete('lock_key')
+else:
+    # Lock already held
+    pass
+```
+
+### cache.get_or_set()
+
+Fetches a value from the cache, or sets it if not found.
+
+```python
+value = cache.get_or_set(key, default, timeout=DEFAULT_TIMEOUT, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key
+</ParamField>
+
+<ParamField path="default" type="any | callable" required>
+  Value to set if key doesn't exist, or a callable that returns the value
+</ParamField>
+
+<ParamField path="timeout" type="int | None" default="300">
+  Timeout in seconds
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="any">
+  The cached value (either existing or newly set)
+</ResponseField>
+
+**Usage:**
+```python
+# With a value
+value = cache.get_or_set('my_key', 'default_value', 300)
+
+# With a callable
+value = cache.get_or_set('expensive_key', expensive_computation, 3600)
+```
+
+### cache.delete()
+
+Deletes a key from the cache.
+
+```python
+success = cache.delete(key, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key to delete
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  `True` if the key was deleted, `False` if it didn't exist
+</ResponseField>
+
+**Usage:**
+```python
+cache.delete('my_key')
+```
+
+### cache.get_many()
+
+Fetches multiple keys at once (more efficient than multiple `get()` calls).
+
+```python
+values = cache.get_many(keys, version=None)
+```
+
+<ParamField path="keys" type="list" required>
+  List of cache keys to retrieve
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="dict">
+  Dictionary mapping keys to their values (missing keys are omitted)
+</ResponseField>
+
+**Usage:**
+```python
+keys = ['key1', 'key2', 'key3']
+values = cache.get_many(keys)
+# Returns: {'key1': 'value1', 'key3': 'value3'}  # key2 not in cache
+```
+
+### cache.set_many()
+
+Sets multiple key-value pairs at once.
+
+```python
+failed_keys = cache.set_many(data, timeout=DEFAULT_TIMEOUT, version=None)
+```
+
+<ParamField path="data" type="dict" required>
+  Dictionary of key-value pairs to cache
+</ParamField>
+
+<ParamField path="timeout" type="int | None" default="300">
+  Timeout in seconds for all keys
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="list">
+  List of keys that failed to insert (empty list if all succeeded)
+</ResponseField>
+
+**Usage:**
+```python
+data = {
+    'key1': 'value1',
+    'key2': 'value2',
+    'key3': 'value3',
+}
+cache.set_many(data, 300)
+```
+
+### cache.delete_many()
+
+Deletes multiple keys at once.
+
+```python
+cache.delete_many(keys, version=None)
+```
+
+<ParamField path="keys" type="list" required>
+  List of cache keys to delete
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+**Usage:**
+```python
+cache.delete_many(['key1', 'key2', 'key3'])
+```
+
+### cache.clear()
+
+Removes all keys from the cache.
+
+```python
+cache.clear()
+```
+
+**Warning:** This removes *all* values from the cache, not just those set by your application.
+
+### cache.touch()
+
+Updates the expiry time of a cached value.
+
+```python
+success = cache.touch(key, timeout=DEFAULT_TIMEOUT, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key to update
+</ParamField>
+
+<ParamField path="timeout" type="int" default="300">
+  New timeout in seconds
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  `True` if the key was touched, `False` if it didn't exist
+</ResponseField>
+
+**Usage:**
+```python
+# Extend cache time by another 300 seconds
+cache.touch('my_key', 300)
+```
+
+### cache.incr() / cache.decr()
+
+Increments or decrements a numeric cache value.
+
+```python
+new_value = cache.incr(key, delta=1, version=None)
+new_value = cache.decr(key, delta=1, version=None)
+```
+
+<ParamField path="key" type="str" required>
+  The cache key
+</ParamField>
+
+<ParamField path="delta" type="int" default="1">
+  Amount to increment/decrement by
+</ParamField>
+
+<ParamField path="version" type="int" default="None">
+  Cache key version number
+</ParamField>
+
+<ResponseField name="return" type="int">
+  The new value after increment/decrement
+</ResponseField>
+
+**Raises:** `ValueError` if the key doesn't exist
+
+**Usage:**
+```python
+cache.set('counter', 0)
+cache.incr('counter')     # Returns 1
+cache.incr('counter', 5)  # Returns 6
+cache.decr('counter', 2)  # Returns 4
+```
+
+## Multiple Cache Backends
+
+Access non-default cache backends:
+
+```python
+from django.core.cache import caches
+
+# Access specific cache
+secondary_cache = caches['secondary']
+secondary_cache.set('key', 'value')
+
+# Access default cache
+default_cache = caches['default']
+```
+
+## Cache Decorators
+
+### cache_page
+
+Caches the entire response of a view.
+
+```python
+from django.views.decorators.cache import cache_page
+
+@cache_page(timeout, cache=None, key_prefix=None)
+def my_view(request):
+    pass
+```
+
+<ParamField path="timeout" type="int" required>
+  Cache timeout in seconds
+</ParamField>
+
+<ParamField path="cache" type="str" default="None">
+  Name of cache backend to use (defaults to 'default')
+</ParamField>
+
+<ParamField path="key_prefix" type="str" default="None">
+  Prefix for cache keys
+</ParamField>
+
+**Usage:**
+```python
+from django.views.decorators.cache import cache_page
+
+# Cache for 15 minutes
+@cache_page(60 * 15)
+def my_view(request):
+    return render(request, 'template.html')
+
+# With custom cache backend
+@cache_page(60 * 15, cache='special_cache')
+def special_view(request):
+    return render(request, 'template.html')
+
+# In URLconf
+from django.views.decorators.cache import cache_page
+
+urlpatterns = [
+    path('articles/<int:id>/', cache_page(60 * 15)(article_detail)),
+]
+```
+
+### never_cache
+
+Adds headers to prevent caching.
+
+```python
+from django.views.decorators.cache import never_cache
+
+@never_cache
+def my_view(request):
+    pass
+```
+
+**Usage:**
+```python
+from django.views.decorators.cache import never_cache
+
+@never_cache
+def sensitive_view(request):
+    # This view's response will never be cached
+    return render(request, 'sensitive.html')
+```
+
+### cache_control
+
+Sets Cache-Control headers on the response.
+
+```python
+from django.views.decorators.cache import cache_control
+
+@cache_control(**kwargs)
+def my_view(request):
+    pass
+```
+
+**Usage:**
+```python
+from django.views.decorators.cache import cache_control
+
+@cache_control(private=True, max_age=3600)
+def my_view(request):
+    return render(request, 'template.html')
+
+@cache_control(public=True, max_age=7200, s_maxage=3600)
+def public_view(request):
+    return render(request, 'public.html')
+```
+
+## Async Cache Operations
+
+All cache methods have async equivalents with an `a` prefix:
+
+```python
+from django.core.cache import cache
+
+async def my_async_view(request):
+    # Async cache operations
+    await cache.aset('key', 'value', 300)
+    value = await cache.aget('key')
+    await cache.adelete('key')
+    
+    # Bulk operations
+    await cache.aset_many({'key1': 'val1', 'key2': 'val2'})
+    values = await cache.aget_many(['key1', 'key2'])
+    await cache.adelete_many(['key1', 'key2'])
+    
+    # Other operations
+    value = await cache.aget_or_set('key', 'default', 300)
+    await cache.aincr('counter')
+    await cache.adecr('counter')
+    await cache.atouch('key', 300)
+    await cache.aclear()
+```
+
+## Cache Key Versioning
+
+Cache keys support versioning for invalidating groups of cached data:
+
+```python
+# Set with version
+cache.set('my_key', 'value', version=1)
+
+# Get with version
+value = cache.get('my_key', version=1)
+
+# Increment version (invalidates old version)
+new_version = cache.incr_version('my_key', version=1)
+# new_version is now 2, version 1 is effectively deleted
+```
+
+## BaseCache Class
+
+All cache backends inherit from `BaseCache`. You can create custom cache backends by subclassing:
+
+```python
+from django.core.cache.backends.base import BaseCache
+
+class MyCustomCache(BaseCache):
+    def __init__(self, params):
+        super().__init__(params)
+        # Initialize your backend
+    
+    def get(self, key, default=None, version=None):
+        # Implement get
+        pass
+    
+    def set(self, key, value, timeout=DEFAULT_TIMEOUT, version=None):
+        # Implement set
+        pass
+    
+    def delete(self, key, version=None):
+        # Implement delete
+        pass
+    
+    def clear(self):
+        # Implement clear
+        pass
+```
+
+## Common Patterns
+
+### Caching Expensive Queries
+
+```python
+def get_latest_articles():
+    articles = cache.get('latest_articles')
+    if articles is None:
+        articles = Article.objects.filter(
+            published=True
+        ).order_by('-pub_date')[:10]
+        cache.set('latest_articles', articles, 300)
+    return articles
+```
+
+### Cache Invalidation
+
+```python
+from django.db.models.signals import post_save
+from django.core.cache import cache
+
+def invalidate_article_cache(sender, instance, **kwargs):
+    cache.delete(f'article_{instance.id}')
+    cache.delete('latest_articles')
+
+post_save.connect(invalidate_article_cache, sender=Article)
+```
+
+### Template Fragment Caching
+
+In templates:
+```django
+{% load cache %}
+
+{% cache 500 sidebar request.user.username %}
+    .. sidebar for logged in user ..
+{% endcache %}
+```
+
+## See Also
+
+- [Cache Middleware](/api/middleware#cache-middleware) - Automatic page caching
+- [Template Cache Tag](/api/templates/tags#cache) - Template fragment caching
+- [Settings Reference](/api/settings#caches) - Cache configuration

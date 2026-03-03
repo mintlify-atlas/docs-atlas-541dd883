@@ -1,0 +1,466 @@
+---
+title: Messages Framework
+description: One-time notification messages for Django applications
+---
+
+The messages framework provides a way to store and display one-time notification messages to users. Messages persist across requests and are typically displayed after form submissions or other actions.
+
+## Installation
+
+```python settings.py
+INSTALLED_APPS = [
+    'django.contrib.messages',
+]
+
+MIDDLEWARE = [
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+]
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'OPTIONS': {
+            'context_processors': [
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+```
+
+## Message Levels
+
+The message levels are defined in `django.contrib.messages.constants`:
+
+```python
+from django.contrib.messages import constants
+
+# Built-in levels
+DEBUG = 10      # Development-related messages
+INFO = 20       # Informational messages
+SUCCESS = 25    # Success confirmations
+WARNING = 30    # Warning messages
+ERROR = 40      # Error messages
+```
+
+## Adding Messages
+
+From `django.contrib.messages.api`:
+
+```python views.py
+from django.contrib import messages
+from django.shortcuts import render, redirect
+
+def create_article(request):
+    if request.method == 'POST':
+        # Process form...
+        article = Article.objects.create(**form_data)
+        
+        # Add success message
+        messages.success(request, 'Article created successfully!')
+        return redirect('article_detail', pk=article.pk)
+    
+    return render(request, 'create_article.html')
+
+def delete_article(request, pk):
+    article = Article.objects.get(pk=pk)
+    article.delete()
+    
+    # Add info message
+    messages.info(request, f'Article "{article.title}" was deleted.')
+    return redirect('article_list')
+
+def publish_article(request, pk):
+    article = Article.objects.get(pk=pk)
+    
+    if not request.user.has_perm('blog.can_publish'):
+        # Add error message
+        messages.error(request, 'You do not have permission to publish articles.')
+        return redirect('article_detail', pk=pk)
+    
+    article.status = 'published'
+    article.save()
+    messages.success(request, 'Article published successfully!')
+    return redirect('article_detail', pk=pk)
+```
+
+## Message API Functions
+
+All functions are in `django.contrib.messages`:
+
+```python
+from django.contrib import messages
+
+# Add message with specific level
+messages.add_message(request, messages.INFO, 'Hello world')
+
+# Convenience methods
+messages.debug(request, 'Debug info')       # DEBUG level
+messages.info(request, 'FYI')               # INFO level
+messages.success(request, 'Success!')       # SUCCESS level
+messages.warning(request, 'Be careful')     # WARNING level
+messages.error(request, 'Error occurred')   # ERROR level
+
+# Add extra tags
+messages.success(
+    request,
+    'Profile updated',
+    extra_tags='profile-success'
+)
+
+# Fail silently (no error if middleware not installed)
+messages.info(request, 'Message', fail_silently=True)
+```
+
+## Displaying Messages
+
+In your templates:
+
+```django template.html
+{% if messages %}
+<div class="messages">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+```
+
+### With Bootstrap Styling
+
+```django template.html
+{% if messages %}
+<div class="container mt-3">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+```
+
+### Message Tags Mapping
+
+Map message levels to CSS classes:
+
+```python settings.py
+from django.contrib.messages import constants as message_constants
+
+MESSAGE_TAGS = {
+    message_constants.DEBUG: 'debug',
+    message_constants.INFO: 'info',
+    message_constants.SUCCESS: 'success',
+    message_constants.WARNING: 'warning',
+    message_constants.ERROR: 'danger',  # Bootstrap uses 'danger' for errors
+}
+```
+
+## Message Attributes
+
+Each message has several attributes:
+
+```django template.html
+{% for message in messages %}
+<div class="alert alert-{{ message.tags }}">
+    <strong>{{ message.level_tag|upper }}:</strong> {{ message.message }}
+    
+    {% if message.extra_tags %}
+        <span class="{{ message.extra_tags }}"></span>
+    {% endif %}
+</div>
+{% endfor %}
+```
+
+Message attributes:
+- `message` or `message.message`: The message text
+- `message.tags`: CSS classes based on level
+- `message.level`: Numeric level (10, 20, 25, 30, 40)
+- `message.level_tag`: String level ('debug', 'info', 'success', 'warning', 'error')
+- `message.extra_tags`: Additional tags passed when creating the message
+
+## Message Storage Backends
+
+Configure storage backend in settings:
+
+```python settings.py
+# Session backend (default)
+MESSAGE_STORAGE = 'django.contrib.messages.storage.session.SessionStorage'
+
+# Cookie backend
+MESSAGE_STORAGE = 'django.contrib.messages.storage.cookie.CookieStorage'
+
+# Fallback storage (tries cookie, falls back to session)
+MESSAGE_STORAGE = 'django.contrib.messages.storage.fallback.FallbackStorage'
+```
+
+### FallbackStorage (Default)
+
+Uses cookies for small messages, session for larger ones:
+
+```python settings.py
+MESSAGE_STORAGE = 'django.contrib.messages.storage.fallback.FallbackStorage'
+```
+
+## Message Levels in Settings
+
+Control which messages are displayed:
+
+```python settings.py
+from django.contrib.messages import constants as message_constants
+
+# Set minimum level (only SUCCESS and above will be shown)
+MESSAGE_LEVEL = message_constants.SUCCESS
+```
+
+### Per-Request Level
+
+Change the level for a specific request:
+
+```python views.py
+from django.contrib import messages
+
+def debug_view(request):
+    # Temporarily show DEBUG messages
+    messages.set_level(request, messages.DEBUG)
+    messages.debug(request, 'Debug information here')
+    
+    # Get current level
+    current_level = messages.get_level(request)
+    
+    return render(request, 'debug.html')
+```
+
+## Advanced Usage
+
+### Custom Message Class
+
+```python messages.py
+from django.contrib.messages.storage.base import Message
+from django.contrib.messages import constants
+
+class CustomMessage(Message):
+    def __init__(self, level, message, extra_tags='', icon=None):
+        super().__init__(level, message, extra_tags)
+        self.icon = icon
+
+# In views
+from django.contrib import messages
+
+def my_view(request):
+    storage = messages.get_messages(request)
+    storage.add(
+        CustomMessage(
+            messages.SUCCESS,
+            'Operation completed!',
+            icon='check-circle'
+        )
+    )
+```
+
+### Accessing Messages in Views
+
+```python views.py
+from django.contrib.messages import get_messages
+
+def my_view(request):
+    # Get all messages
+    storage = get_messages(request)
+    
+    # Iterate (this will mark them as used)
+    for message in storage:
+        print(f'{message.level_tag}: {message}')
+    
+    # Check if there are messages
+    if storage:
+        print('There are messages')
+    
+    return render(request, 'template.html')
+```
+
+### Conditional Messages
+
+```python views.py
+from django.contrib import messages
+
+def update_profile(request):
+    if request.method == 'POST':
+        form = ProfileForm(request.POST, instance=request.user.profile)
+        
+        if form.is_valid():
+            form.save()
+            
+            # Different messages based on what changed
+            if 'email' in form.changed_data:
+                messages.info(
+                    request,
+                    'Please verify your new email address.',
+                    extra_tags='email-verification'
+                )
+            
+            if 'avatar' in form.changed_data:
+                messages.success(request, 'Avatar updated successfully!')
+            
+            if not form.changed_data:
+                messages.info(request, 'No changes were made.')
+            else:
+                messages.success(request, 'Profile updated successfully!')
+            
+            return redirect('profile')
+        else:
+            messages.error(
+                request,
+                'Please correct the errors below.',
+                extra_tags='form-error'
+            )
+    
+    return render(request, 'profile_form.html')
+```
+
+## Messages in Class-Based Views
+
+```python views.py
+from django.contrib import messages
+from django.contrib.messages.views import SuccessMessageMixin
+from django.views.generic import CreateView, UpdateView, DeleteView
+from django.urls import reverse_lazy
+
+class ArticleCreateView(SuccessMessageMixin, CreateView):
+    model = Article
+    fields = ['title', 'content']
+    success_message = 'Article "%(title)s" was created successfully!'
+
+class ArticleUpdateView(SuccessMessageMixin, UpdateView):
+    model = Article
+    fields = ['title', 'content']
+    success_message = 'Article was updated successfully!'
+
+class ArticleDeleteView(DeleteView):
+    model = Article
+    success_url = reverse_lazy('article_list')
+    
+    def delete(self, request, *args, **kwargs):
+        obj = self.get_object()
+        messages.success(request, f'Article "{obj.title}" was deleted.')
+        return super().delete(request, *args, **kwargs)
+```
+
+## AJAX and Messages
+
+Return messages in JSON responses:
+
+```python views.py
+from django.contrib import messages
+from django.http import JsonResponse
+
+def ajax_create_article(request):
+    if request.method == 'POST':
+        # Process...
+        article = Article.objects.create(**data)
+        
+        # Add message
+        messages.success(request, 'Article created!')
+        
+        # Get messages for JSON response
+        storage = messages.get_messages(request)
+        message_list = [{
+            'level': m.level,
+            'message': m.message,
+            'tags': m.tags,
+        } for m in storage]
+        
+        return JsonResponse({
+            'success': True,
+            'article_id': article.id,
+            'messages': message_list
+        })
+```
+
+## Testing with Messages
+
+```python tests.py
+from django.contrib.messages import get_messages
+from django.test import TestCase
+
+class ArticleViewTests(TestCase):
+    def test_create_article_success_message(self):
+        response = self.client.post('/articles/create/', {
+            'title': 'Test Article',
+            'content': 'Content here'
+        })
+        
+        # Get messages from response
+        messages = list(get_messages(response.wsgi_request))
+        
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(str(messages[0]), 'Article created successfully!')
+        self.assertEqual(messages[0].level_tag, 'success')
+```
+
+## Message Storage API
+
+Direct storage manipulation:
+
+```python
+from django.contrib.messages.storage import default_storage
+
+# Get storage
+storage = default_storage(request)
+
+# Add message
+storage.add(messages.INFO, 'Custom message')
+
+# Get level
+current_level = storage.level
+
+# Set level
+storage.level = messages.DEBUG
+
+# Check if messages exist
+has_messages = len(storage) > 0
+```
+
+## Key API Reference
+
+### Functions
+
+Location: `django.contrib.messages.api`
+
+- `add_message(request, level, message, extra_tags='', fail_silently=False)`
+- `debug(request, message, extra_tags='', fail_silently=False)`
+- `info(request, message, extra_tags='', fail_silently=False)`
+- `success(request, message, extra_tags='', fail_silently=False)`
+- `warning(request, message, extra_tags='', fail_silently=False)`
+- `error(request, message, extra_tags='', fail_silently=False)`
+- `get_messages(request)` - Returns message storage
+- `get_level(request)` - Returns minimum level
+- `set_level(request, level)` - Sets minimum level
+
+### Constants
+
+Location: `django.contrib.messages.constants`
+
+- `DEBUG = 10`
+- `INFO = 20`
+- `SUCCESS = 25`
+- `WARNING = 30`
+- `ERROR = 40`
+
+### Message Class
+
+Location: `django.contrib.messages.storage.base.Message`
+
+Attributes:
+- `level`: Numeric level
+- `message`: Message text
+- `extra_tags`: Additional CSS classes
+- `level_tag`: String representation of level
+- `tags`: Combined tags string
+
+<Note>
+Messages are stored in the user's session or cookies and are deleted once they are displayed.
+</Note>

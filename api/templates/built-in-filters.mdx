@@ -1,0 +1,1098 @@
+---
+title: Built-in Template Filters
+description: Complete reference for Django's built-in template filters
+---
+
+Django's built-in filters transform variables in templates using the `{{ variable|filter }}` syntax. Filters can be chained and may take arguments.
+
+## String Filters
+
+<Accordion title="addslashes">
+  Add slashes before quotes.
+
+  **Syntax:** `{{ value|addslashes }}`
+
+  **Example:**
+  ```django
+  {{ text|addslashes }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "I'm using Django"  →  "I\'m using Django"
+  'He said "hello"'   →  'He said \"hello\"'
+  ```
+
+  **Use case:** Escaping strings for CSV or JavaScript (though use `escapejs` for JavaScript)
+</Accordion>
+
+<Accordion title="capfirst">
+  Capitalize the first character.
+
+  **Syntax:** `{{ value|capfirst }}`
+
+  **Example:**
+  ```django
+  {{ title|capfirst }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "django"     →  "Django"
+  "hello world" →  "Hello world"
+  ```
+</Accordion>
+
+<Accordion title="center">
+  Center the value in a field of given width.
+
+  **Syntax:** `{{ value|center:width }}`
+
+  **Example:**
+  ```django
+  {{ "Django"|center:15 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Django" (width=15)  →  "    Django     "
+  ```
+</Accordion>
+
+<Accordion title="cut">
+  Remove all values of the argument from the string.
+
+  **Syntax:** `{{ value|cut:arg }}`
+
+  **Examples:**
+  ```django
+  {{ value|cut:" " }}  {# Remove spaces #}
+  {{ value|cut:"," }}  {# Remove commas #}
+  ```
+
+  **Input/Output:**
+  ```python
+  "String with spaces"|cut:" "  →  "Stringwithspaces"
+  "a,b,c,d"|cut:","              →  "abcd"
+  ```
+</Accordion>
+
+<Accordion title="lower">
+  Convert string to lowercase.
+
+  **Syntax:** `{{ value|lower }}`
+
+  **Example:**
+  ```django
+  {{ name|lower }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "HELLO WORLD"  →  "hello world"
+  "Django"       →  "django"
+  ```
+</Accordion>
+
+<Accordion title="upper">
+  Convert string to uppercase.
+
+  **Syntax:** `{{ value|upper }}`
+
+  **Example:**
+  ```django
+  {{ name|upper }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "hello world"  →  "HELLO WORLD"
+  "Django"       →  "DJANGO"
+  ```
+</Accordion>
+
+<Accordion title="title">
+  Convert string to titlecase.
+
+  **Syntax:** `{{ value|title }}`
+
+  **Example:**
+  ```django
+  {{ headline|title }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "hello world"           →  "Hello World"
+  "the django framework"  →  "The Django Framework"
+  ```
+
+  **Note:** Handles apostrophes intelligently: `"they're"` → `"They're"`
+</Accordion>
+
+<Accordion title="slugify">
+  Convert to ASCII, replace spaces with hyphens, remove non-alphanumeric characters, convert to lowercase.
+
+  **Syntax:** `{{ value|slugify }}`
+
+  **Example:**
+  ```django
+  {{ article.title|slugify }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Joel is a slug"        →  "joel-is-a-slug"
+  "  Django Docs  "       →  "django-docs"
+  "Hello, World!"         →  "hello-world"
+  "Café & Restaurant"     →  "cafe-restaurant"
+  ```
+</Accordion>
+
+<Accordion title="ljust">
+  Left-align the value in a field of given width.
+
+  **Syntax:** `{{ value|ljust:width }}`
+
+  **Example:**
+  ```django
+  {{ "Django"|ljust:10 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Django" (width=10)  →  "Django    "
+  ```
+</Accordion>
+
+<Accordion title="rjust">
+  Right-align the value in a field of given width.
+
+  **Syntax:** `{{ value|rjust:width }}`
+
+  **Example:**
+  ```django
+  {{ "Django"|rjust:10 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Django" (width=10)  →  "    Django"
+  ```
+</Accordion>
+
+<Accordion title="make_list">
+  Return the value as a list.
+
+  **Syntax:** `{{ value|make_list }}`
+
+  **Examples:**
+  ```django
+  {{ "Django"|make_list }}
+  {{ 12345|make_list }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Django"  →  ['D', 'j', 'a', 'n', 'g', 'o']
+  12345     →  ['1', '2', '3', '4', '5']
+  ```
+</Accordion>
+
+<Accordion title="wordcount">
+  Return the number of words.
+
+  **Syntax:** `{{ value|wordcount }}`
+
+  **Example:**
+  ```django
+  {{ article.body|wordcount }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Hello world"          →  2
+  "The quick brown fox"  →  4
+  ```
+</Accordion>
+
+<Accordion title="wordwrap">
+  Wrap words at specified line length.
+
+  **Syntax:** `{{ value|wordwrap:width }}`
+
+  **Example:**
+  ```django
+  {{ text|wordwrap:50 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "This is a long line that will be wrapped at 50 characters per line."
+  →
+  "This is a long line that will be wrapped at 50
+characters per line."
+  ```
+</Accordion>
+
+## Truncation Filters
+
+<Accordion title="truncatechars">
+  Truncate string after a certain number of characters.
+
+  **Syntax:** `{{ value|truncatechars:num }}`
+
+  **Example:**
+  ```django
+  {{ article.body|truncatechars:30 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "This is a very long text..." (num=20)  →  "This is a very lo..."
+  ```
+
+  **Note:** The ellipsis `...` counts toward the total length.
+</Accordion>
+
+<Accordion title="truncatechars_html">
+  Truncate HTML after a certain number of characters, preserving tags.
+
+  **Syntax:** `{{ value|truncatechars_html:num }}`
+
+  **Example:**
+  ```django
+  {{ article.html_body|truncatechars_html:30 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "<p>This is a <strong>bold</strong> text</p>" (num=20)
+  →
+  "<p>This is a <strong>bo...</strong></p>"
+  ```
+
+  **Note:** Properly closes HTML tags.
+</Accordion>
+
+<Accordion title="truncatewords">
+  Truncate after a certain number of words.
+
+  **Syntax:** `{{ value|truncatewords:num }}`
+
+  **Example:**
+  ```django
+  {{ article.body|truncatewords:10 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "This is a long sentence with many words" (num=5)
+  →
+  "This is a long sentence …"
+  ```
+</Accordion>
+
+<Accordion title="truncatewords_html">
+  Truncate HTML after a certain number of words, preserving tags.
+
+  **Syntax:** `{{ value|truncatewords_html:num }}`
+
+  **Example:**
+  ```django
+  {{ article.html_body|truncatewords_html:10 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "<p>This is a <strong>bold text</strong> with content</p>" (num=4)
+  →
+  "<p>This is a <strong>bold …</strong></p>"
+  ```
+</Accordion>
+
+## HTML Filters
+
+<Accordion title="escape">
+  Escape HTML characters.
+
+  **Syntax:** `{{ value|escape }}`
+
+  **Example:**
+  ```django
+  {{ user_input|escape }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "<b>Bold</b>"     →  "&lt;b&gt;Bold&lt;/b&gt;"
+  "Tom & Jerry"     →  "Tom &amp; Jerry"
+  "It's great"      →  "It&#x27;s great"
+  ```
+
+  **Escaped characters:** `<`, `>`, `'`, `"`, `&`
+</Accordion>
+
+<Accordion title="force_escape">
+  Force HTML escaping (even if already marked safe).
+
+  **Syntax:** `{{ value|force_escape }}`
+
+  **Example:**
+  ```django
+  {{ html_content|force_escape }}
+  ```
+
+  **Note:** Unlike `escape`, this applies escaping even to SafeString objects.
+</Accordion>
+
+<Accordion title="escapejs">
+  Escape characters for use in JavaScript strings.
+
+  **Syntax:** `{{ value|escapejs }}`
+
+  **Example:**
+  ```django
+  <script>
+      var message = "{{ message|escapejs }}";
+  </script>
+  ```
+
+  **Input/Output:**
+  ```python
+  "He said \"hello\""  →  "He said \\x22hello\\x22"
+  ```
+</Accordion>
+
+<Accordion title="safe">
+  Mark string as safe (won't be auto-escaped).
+
+  **Syntax:** `{{ value|safe }}`
+
+  **Example:**
+  ```django
+  {{ html_content|safe }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "<b>Bold</b>"|safe  →  <b>Bold</b>  (rendered as HTML)
+  ```
+
+  **Warning:** Only use with trusted content to avoid XSS vulnerabilities.
+</Accordion>
+
+<Accordion title="safeseq">
+  Mark each element in a sequence as safe.
+
+  **Syntax:** `{{ value|safeseq }}`
+
+  **Example:**
+  ```django
+  {% for item in items|safeseq %}
+      {{ item }}
+  {% endfor %}
+  ```
+</Accordion>
+
+<Accordion title="linebreaks">
+  Convert newlines to `<p>` and `<br>` tags.
+
+  **Syntax:** `{{ value|linebreaks }}`
+
+  **Example:**
+  ```django
+  {{ comment.text|linebreaks }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Line 1\n\nLine 2\nLine 3"
+  →
+  "<p>Line 1</p>\n\n<p>Line 2<br>Line 3</p>"
+  ```
+
+  **Note:** Single newline becomes `<br>`, double newline becomes `</p><p>`.
+</Accordion>
+
+<Accordion title="linebreaksbr">
+  Convert newlines to `<br>` tags.
+
+  **Syntax:** `{{ value|linebreaksbr }}`
+
+  **Example:**
+  ```django
+  {{ text|linebreaksbr }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Line 1\nLine 2\nLine 3"
+  →
+  "Line 1<br>Line 2<br>Line 3"
+  ```
+</Accordion>
+
+<Accordion title="striptags">
+  Remove all HTML tags.
+
+  **Syntax:** `{{ value|striptags }}`
+
+  **Example:**
+  ```django
+  {{ html_content|striptags }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "<p>Hello <strong>world</strong>!</p>"  →  "Hello world!"
+  "<a href='/'>Link</a>"                   →  "Link"
+  ```
+</Accordion>
+
+<Accordion title="linenumbers">
+  Display text with line numbers.
+
+  **Syntax:** `{{ value|linenumbers }}`
+
+  **Example:**
+  ```django
+  <pre>{{ code|linenumbers }}</pre>
+  ```
+
+  **Input/Output:**
+  ```python
+  "Line 1\nLine 2\nLine 3"
+  →
+  "1. Line 1\n2. Line 2\n3. Line 3"
+  ```
+</Accordion>
+
+## URL Filters
+
+<Accordion title="urlencode">
+  Escape a value for use in a URL.
+
+  **Syntax:** `{{ value|urlencode }}`
+
+  **Example:**
+  ```django
+  <a href="/search/?q={{ query|urlencode }}">Search</a>
+  ```
+
+  **Input/Output:**
+  ```python
+  "hello world"    →  "hello%20world"
+  "email@test.com" →  "email%40test.com"
+  ```
+
+  **With safe parameter:**
+  ```django
+  {{ value|urlencode:"" }}  {# Escape all characters #}
+  {{ value|urlencode:"/" }} {# Keep / unescaped #}
+  ```
+</Accordion>
+
+<Accordion title="urlize">
+  Convert URLs in text into clickable links.
+
+  **Syntax:** `{{ value|urlize }}`
+
+  **Example:**
+  ```django
+  {{ comment|urlize }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Visit https://djangoproject.com"
+  →
+  'Visit <a href="https://djangoproject.com" rel="nofollow">https://djangoproject.com</a>'
+  ```
+
+  **Note:** Adds `rel="nofollow"` to discourage spam.
+</Accordion>
+
+<Accordion title="urlizetrunc">
+  Convert URLs to links, truncating to specified length.
+
+  **Syntax:** `{{ value|urlizetrunc:length }}`
+
+  **Example:**
+  ```django
+  {{ comment|urlizetrunc:20 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "Check out https://www.djangoproject.com/documentation/" (length=20)
+  →
+  'Check out <a href="https://www.djangoproject.com/documentation/" rel="nofollow">https://www.djang...</a>'
+  ```
+</Accordion>
+
+<Accordion title="iriencode">
+  Escape an IRI value for use in a URL.
+
+  **Syntax:** `{{ value|iriencode }}`
+
+  **Example:**
+  ```django
+  <a href="/{{ path|iriencode }}">Link</a>
+  ```
+
+  **Note:** Similar to `urlencode` but preserves non-ASCII characters per IRI spec.
+</Accordion>
+
+## List Filters
+
+<Accordion title="join">
+  Join a list with a string.
+
+  **Syntax:** `{{ value|join:" // "  }}`
+
+  **Example:**
+  ```django
+  {{ tags|join:", " }}
+  ```
+
+  **Input/Output:**
+  ```python
+  ['Python', 'Django', 'Web']|join:", "  →  "Python, Django, Web"
+  [1, 2, 3]|join:" + "                   →  "1 + 2 + 3"
+  ```
+</Accordion>
+
+<Accordion title="first">
+  Return the first item in a list.
+
+  **Syntax:** `{{ value|first }}`
+
+  **Example:**
+  ```django
+  {{ items|first }}
+  ```
+
+  **Input/Output:**
+  ```python
+  ['a', 'b', 'c']|first  →  'a'
+  []|first               →  ''  (empty string)
+  ```
+</Accordion>
+
+<Accordion title="last">
+  Return the last item in a list.
+
+  **Syntax:** `{{ value|last }}`
+
+  **Example:**
+  ```django
+  {{ items|last }}
+  ```
+
+  **Input/Output:**
+  ```python
+  ['a', 'b', 'c']|last  →  'c'
+  []|last               →  ''  (empty string)
+  ```
+</Accordion>
+
+<Accordion title="length">
+  Return the length of the value.
+
+  **Syntax:** `{{ value|length }}`
+
+  **Example:**
+  ```django
+  {{ items|length }}
+  {{ "hello"|length }}
+  ```
+
+  **Input/Output:**
+  ```python
+  ['a', 'b', 'c']|length  →  3
+  "Django"|length         →  6
+  {}|length               →  0
+  ```
+</Accordion>
+
+<Accordion title="random">
+  Return a random item from the list.
+
+  **Syntax:** `{{ value|random }}`
+
+  **Example:**
+  ```django
+  {{ colors|random }}
+  ```
+
+  **Input/Output:**
+  ```python
+  ['red', 'blue', 'green']|random  →  'blue'  (or 'red' or 'green')
+  ```
+</Accordion>
+
+<Accordion title="slice">
+  Return a slice of the list.
+
+  **Syntax:** `{{ value|slice:":2" }}`
+
+  **Examples:**
+  ```django
+  {{ items|slice:":3" }}   {# First 3 items #}
+  {{ items|slice:"2:" }}   {# From 3rd item onward #}
+  {{ items|slice:"1:4" }}  {# Items 2-4 #}
+  ```
+
+  **Input/Output:**
+  ```python
+  ['a','b','c','d','e']|slice:":2"   →  ['a', 'b']
+  ['a','b','c','d','e']|slice:"2:4"  →  ['c', 'd']
+  ```
+
+  **Note:** Uses Python slice syntax.
+</Accordion>
+
+<Accordion title="dictsort">
+  Sort a list of dictionaries by a key.
+
+  **Syntax:** `{{ value|dictsort:"key" }}`
+
+  **Example:**
+  ```django
+  {% for person in people|dictsort:"age" %}
+      {{ person.name }} - {{ person.age }}
+  {% endfor %}
+  ```
+
+  **Input/Output:**
+  ```python
+  [{'name':'Bob','age':30}, {'name':'Alice','age':25}]|dictsort:"age"
+  →
+  [{'name':'Alice','age':25}, {'name':'Bob','age':30}]
+  ```
+</Accordion>
+
+<Accordion title="dictsortreversed">
+  Sort a list of dictionaries in reverse order by a key.
+
+  **Syntax:** `{{ value|dictsortreversed:"key" }}`
+
+  **Example:**
+  ```django
+  {% for item in items|dictsortreversed:"price" %}
+      {{ item.name }} - ${{ item.price }}
+  {% endfor %}
+  ```
+</Accordion>
+
+<Accordion title="unordered_list">
+  Recursively create an HTML unordered list.
+
+  **Syntax:** `{{ value|unordered_list }}`
+
+  **Example:**
+  ```django
+  {{ nested_list|unordered_list }}
+  ```
+
+  **Input:**
+  ```python
+  ['States', ['Kansas', ['Lawrence', 'Topeka'], 'Illinois']]
+  ```
+
+  **Output:**
+  ```html
+  <li>States
+  <ul>
+      <li>Kansas
+      <ul>
+          <li>Lawrence</li>
+          <li>Topeka</li>
+      </ul>
+      </li>
+      <li>Illinois</li>
+  </ul>
+  </li>
+  ```
+</Accordion>
+
+## Number Filters
+
+<Accordion title="add">
+  Add the argument to the value.
+
+  **Syntax:** `{{ value|add:"2" }}`
+
+  **Examples:**
+  ```django
+  {{ count|add:"1" }}
+  {{ first_list|add:second_list }}  {# Concatenate lists #}
+  ```
+
+  **Input/Output:**
+  ```python
+  5|add:"3"              →  8
+  "Hello "|add:"World"   →  "Hello World"
+  [1,2]|add:[3,4]        →  [1, 2, 3, 4]
+  ```
+</Accordion>
+
+<Accordion title="get_digit">
+  Get a digit from a number (1 is rightmost).
+
+  **Syntax:** `{{ value|get_digit:"2" }}`
+
+  **Example:**
+  ```django
+  {{ number|get_digit:"1" }}
+  ```
+
+  **Input/Output:**
+  ```python
+  12345|get_digit:"1"  →  5  (rightmost)
+  12345|get_digit:"2"  →  4
+  12345|get_digit:"5"  →  1  (leftmost)
+  ```
+</Accordion>
+
+<Accordion title="floatformat">
+  Format a float to a specified number of decimal places.
+
+  **Syntax:** `{{ value|floatformat }}`
+
+  **Examples:**
+  ```django
+  {{ value|floatformat }}      {# Default: 1 decimal if needed #}
+  {{ value|floatformat:3 }}    {# Always 3 decimals #}
+  {{ value|floatformat:"-3" }} {# Up to 3 decimals if needed #}
+  {{ value|floatformat:"2g" }} {# 2 decimals with grouping #}
+  ```
+
+  **Input/Output:**
+  ```python
+  34.23234|floatformat       →  "34.2"
+  34.00000|floatformat       →  "34"
+  34.23234|floatformat:3     →  "34.232"
+  34.00000|floatformat:3     →  "34.000"
+  6666.6666|floatformat:"2g" →  "6,666.67"
+  ```
+
+  **Flags:**
+  - Positive arg: Always show that many decimals
+  - Negative arg: Show decimals only if needed
+  - `g` suffix: Use thousand separator
+  - `u` suffix: Force unlocalized output
+</Accordion>
+
+<Accordion title="stringformat">
+  Format the variable using Python string formatting.
+
+  **Syntax:** `{{ value|stringformat:"s" }}`
+
+  **Examples:**
+  ```django
+  {{ number|stringformat:"d" }}   {# Integer #}
+  {{ number|stringformat:"f" }}   {# Float #}
+  {{ number|stringformat:".2f" }} {# 2 decimal places #}
+  ```
+
+  **Input/Output:**
+  ```python
+  42|stringformat:"05d"   →  "00042"
+  3.14159|stringformat:".2f" →  "3.14"
+  ```
+
+  **Note:** Uses Python's `%` string formatting (drop the leading `%`).
+</Accordion>
+
+## Date/Time Filters
+
+<Accordion title="date">
+  Format a date according to the given format.
+
+  **Syntax:** `{{ value|date:"Y-m-d" }}`
+
+  **Common formats:**
+  - `"Y-m-d"` - 2026-03-04
+  - `"F j, Y"` - March 4, 2026
+  - `"D d M Y"` - Wed 04 Mar 2026
+  - `"N j, Y, P"` - March 4, 2026, 3:30 p.m.
+
+  **Examples:**
+  ```django
+  {{ post.published_date|date:"F j, Y" }}
+  {{ now|date:"SHORT_DATE_FORMAT" }}  {# Use Django setting #}
+  ```
+
+  **Format characters:** See [PHP date() function](https://php.net/date) for full reference.
+</Accordion>
+
+<Accordion title="time">
+  Format a time according to the given format.
+
+  **Syntax:** `{{ value|time:"H:i" }}`
+
+  **Examples:**
+  ```django
+  {{ event.start_time|time:"H:i" }}     {# 14:30 #}
+  {{ event.start_time|time:"h:i A" }}   {# 02:30 PM #}
+  ```
+
+  **Input/Output:**
+  ```python
+  datetime.time(14, 30)|time:"H:i"    →  "14:30"
+  datetime.time(14, 30)|time:"h:i A"  →  "02:30 PM"
+  ```
+</Accordion>
+
+<Accordion title="timesince">
+  Format a date as the time since that date.
+
+  **Syntax:** `{{ value|timesince }}`
+
+  **Examples:**
+  ```django
+  {{ post.published_date|timesince }}
+  {{ post.published_date|timesince:reference_date }}
+  ```
+
+  **Input/Output:**
+  ```python
+  # If now is 2026-03-04 15:00
+  2026-03-04 14:30|timesince  →  "30 minutes"
+  2026-03-03 15:00|timesince  →  "1 day"
+  2026-02-04 15:00|timesince  →  "1 month"
+  ```
+</Accordion>
+
+<Accordion title="timeuntil">
+  Format a date as the time until that date.
+
+  **Syntax:** `{{ value|timeuntil }}`
+
+  **Examples:**
+  ```django
+  {{ event.start_date|timeuntil }}
+  {{ deadline|timeuntil:start_date }}
+  ```
+
+  **Input/Output:**
+  ```python
+  # If now is 2026-03-04 15:00
+  2026-03-04 15:30|timeuntil  →  "30 minutes"
+  2026-03-05 15:00|timeuntil  →  "1 day"
+  ```
+</Accordion>
+
+## Logic Filters
+
+<Accordion title="default">
+  Use a default value if the variable is falsy.
+
+  **Syntax:** `{{ value|default:"default value" }}`
+
+  **Examples:**
+  ```django
+  {{ user.nickname|default:"Anonymous" }}
+  {{ count|default:0 }}
+  ```
+
+  **Input/Output:**
+  ```python
+  ""|default:"nothing"      →  "nothing"
+  None|default:"nothing"    →  "nothing"
+  0|default:"nothing"       →  "nothing"  (0 is falsy)
+  "Hello"|default:"nothing" →  "Hello"
+  ```
+
+  **Falsy values:** `None`, `""`, `False`, `0`, `[]`, `{}`, `()`
+</Accordion>
+
+<Accordion title="default_if_none">
+  Use a default value only if the variable is None.
+
+  **Syntax:** `{{ value|default_if_none:"default" }}`
+
+  **Examples:**
+  ```django
+  {{ user.middle_name|default_if_none:"" }}
+  ```
+
+  **Input/Output:**
+  ```python
+  None|default_if_none:"N/A"  →  "N/A"
+  ""|default_if_none:"N/A"    →  ""  (empty string, not None)
+  0|default_if_none:"N/A"     →  0   (0 is not None)
+  ```
+</Accordion>
+
+<Accordion title="divisibleby">
+  Return True if the value is divisible by the argument.
+
+  **Syntax:** `{{ value|divisibleby:"3" }}`
+
+  **Example:**
+  ```django
+  {% if forloop.counter0|divisibleby:"2" %}
+      <tr class="even">
+  {% else %}
+      <tr class="odd">
+  {% endif %}
+  ```
+
+  **Input/Output:**
+  ```python
+  9|divisibleby:"3"   →  True
+  10|divisibleby:"3"  →  False
+  ```
+</Accordion>
+
+<Accordion title="yesno">
+  Map True/False/None to custom strings.
+
+  **Syntax:** `{{ value|yesno:"yes,no,maybe" }}`
+
+  **Examples:**
+  ```django
+  {{ is_active|yesno:"Active,Inactive" }}
+  {{ status|yesno:"✓,✗,?" }}
+  ```
+
+  **Input/Output:**
+  ```python
+  True|yesno:"yeah,no,maybe"   →  "yeah"
+  False|yesno:"yeah,no,maybe"  →  "no"
+  None|yesno:"yeah,no,maybe"   →  "maybe"
+  None|yesno:"yeah,no"         →  "no"  (no maybe value)
+  ```
+</Accordion>
+
+## Miscellaneous Filters
+
+<Accordion title="filesizeformat">
+  Format a file size in human-readable format.
+
+  **Syntax:** `{{ value|filesizeformat }}`
+
+  **Example:**
+  ```django
+  {{ file.size|filesizeformat }}
+  ```
+
+  **Input/Output:**
+  ```python
+  123|filesizeformat          →  "123 bytes"
+  1024|filesizeformat         →  "1.0 KB"
+  1048576|filesizeformat      →  "1.0 MB"
+  1073741824|filesizeformat   →  "1.0 GB"
+  ```
+</Accordion>
+
+<Accordion title="pluralize">
+  Return a plural suffix based on the value.
+
+  **Syntax:** `{{ value|pluralize }}`
+
+  **Examples:**
+  ```django
+  {{ count }} item{{ count|pluralize }}
+  {{ count }} class{{ count|pluralize:"es" }}
+  {{ count }} cand{{ count|pluralize:"y,ies" }}
+  ```
+
+  **Input/Output:**
+  ```python
+  1|pluralize           →  ""      (1 item)
+  0|pluralize           →  "s"     (0 items)
+  2|pluralize           →  "s"     (2 items)
+  1|pluralize:"es"      →  ""      (1 class)
+  2|pluralize:"es"      →  "es"    (2 classes)
+  1|pluralize:"y,ies"   →  "y"     (1 candy)
+  2|pluralize:"y,ies"   →  "ies"   (2 candies)
+  ```
+</Accordion>
+
+<Accordion title="phone2numeric">
+  Convert phone letters to digits.
+
+  **Syntax:** `{{ value|phone2numeric }}`
+
+  **Example:**
+  ```django
+  {{ phone|phone2numeric }}
+  ```
+
+  **Input/Output:**
+  ```python
+  "1-800-FLOWERS"|phone2numeric  →  "1-800-3569377"
+  ```
+</Accordion>
+
+<Accordion title="pprint">
+  Pretty-print a variable for debugging.
+
+  **Syntax:** `{{ value|pprint }}`
+
+  **Example:**
+  ```django
+  <pre>{{ complex_object|pprint }}</pre>
+  ```
+
+  **Note:** Uses Python's `pprint.pformat()` for formatting.
+</Accordion>
+
+<Accordion title="json_script">
+  Output value as JSON wrapped in a script tag.
+
+  **Syntax:** `{{ value|json_script:"element-id" }}`
+
+  **Example:**
+  ```django
+  {{ data|json_script:"user-data" }}
+  ```
+
+  **Input:**
+  ```python
+  {'name': 'John', 'age': 30}
+  ```
+
+  **Output:**
+  ```html
+  <script id="user-data" type="application/json">
+  {"name": "John", "age": 30}
+  </script>
+  ```
+
+  **JavaScript usage:**
+  ```javascript
+  const data = JSON.parse(document.getElementById('user-data').textContent);
+  ```
+</Accordion>
+
+## Chaining Filters
+
+Filters can be chained together:
+
+```django
+{{ text|striptags|lower|truncatewords:30 }}
+{{ name|default:"Anonymous"|title }}
+{{ price|floatformat:2|add:" USD" }}
+```
+
+## Custom Filter Arguments
+
+Some filters accept optional arguments:
+
+```django
+{{ value|filter:"arg" }}
+{{ value|filter:variable }}
+{{ list|join:", " }}
+{{ date|date:"Y-m-d" }}
+```
+
+## Related
+
+- [Built-in Tags](/api/templates/built-in-tags)
+- [Template Engine](/api/templates/engine)
+- [Context Processors](/api/templates/context-processors)

@@ -1,0 +1,806 @@
+---
+title: Form Fields
+description: Complete reference for all Django form field types and their parameters
+---
+
+## Base Field Class
+
+All form fields inherit from the base `Field` class.
+
+```python
+Field(
+    required=True,
+    widget=None,
+    label=None,
+    initial=None,
+    help_text="",
+    error_messages=None,
+    show_hidden_initial=False,
+    validators=(),
+    localize=False,
+    disabled=False,
+    label_suffix=None,
+    template_name=None,
+    bound_field_class=None
+)
+```
+
+<ParamField path="required" type="bool" default="True">
+  Whether the field is required. If `True`, validation fails if field is empty.
+</ParamField>
+
+<ParamField path="widget" type="Widget">
+  Widget instance to use for rendering. Each field has a default widget.
+</ParamField>
+
+<ParamField path="label" type="str">
+  Human-readable label for the field. Auto-generated from field name if not provided.
+</ParamField>
+
+<ParamField path="initial" type="any">
+  Initial value for the field in unbound forms.
+</ParamField>
+
+<ParamField path="help_text" type="str" default="''">
+  Help text to display with the field.
+</ParamField>
+
+<ParamField path="error_messages" type="dict">
+  Dictionary of error codes to custom error messages.
+</ParamField>
+
+<ParamField path="show_hidden_initial" type="bool" default="False">
+  Whether to render a hidden widget with the initial value.
+</ParamField>
+
+<ParamField path="validators" type="list">
+  List of additional validator functions to apply.
+</ParamField>
+
+<ParamField path="localize" type="bool" default="False">
+  Whether to localize field input and output.
+</ParamField>
+
+<ParamField path="disabled" type="bool" default="False">
+  Whether the field is disabled (shown but not editable).
+</ParamField>
+
+<ParamField path="label_suffix" type="str">
+  Suffix to append to the label. Overrides form-level setting.
+</ParamField>
+
+---
+
+## Text Fields
+
+### CharField
+
+Accepts text input.
+
+```python
+CharField(
+    max_length=None,
+    min_length=None,
+    strip=True,
+    empty_value="",
+    **kwargs
+)
+```
+
+<ParamField path="max_length" type="int">
+  Maximum number of characters allowed.
+</ParamField>
+
+<ParamField path="min_length" type="int">
+  Minimum number of characters required.
+</ParamField>
+
+<ParamField path="strip" type="bool" default="True">
+  Whether to strip leading and trailing whitespace.
+</ParamField>
+
+<ParamField path="empty_value" type="str" default="''">
+  Value to return for empty input.
+</ParamField>
+
+```python
+name = forms.CharField(
+    max_length=100,
+    min_length=2,
+    label="Your Name",
+    help_text="Enter your full name"
+)
+```
+
+### EmailField
+
+Validates that input is a valid email address.
+
+```python
+EmailField(**kwargs)
+```
+
+Default widget: `EmailInput`  
+Default max_length: `320` (per RFC 3696)
+
+```python
+email = forms.EmailField(
+    required=True,
+    error_messages={'invalid': 'Please enter a valid email address'}
+)
+```
+
+### URLField
+
+Validates that input is a valid URL.
+
+```python
+URLField(
+    assume_scheme="https",
+    **kwargs
+)
+```
+
+<ParamField path="assume_scheme" type="str" default="https">
+  Scheme to prepend if none provided (e.g., "https", "http").
+</ParamField>
+
+Default widget: `URLInput`
+
+```python
+website = forms.URLField(
+    required=False,
+    assume_scheme="https"
+)
+```
+
+### SlugField
+
+Validates input contains only letters, numbers, underscores, or hyphens.
+
+```python
+SlugField(
+    allow_unicode=False,
+    **kwargs
+)
+```
+
+<ParamField path="allow_unicode" type="bool" default="False">
+  Whether to allow Unicode letters in addition to ASCII.
+</ParamField>
+
+```python
+slug = forms.SlugField(max_length=50)
+```
+
+### RegexField
+
+Validates input against a regular expression.
+
+```python
+RegexField(
+    regex,
+    **kwargs
+)
+```
+
+<ParamField path="regex" type="str | Pattern" required>
+  Regular expression string or compiled pattern object.
+</ParamField>
+
+```python
+phone = forms.RegexField(
+    regex=r'^\d{3}-\d{3}-\d{4}$',
+    error_messages={'invalid': 'Enter format: XXX-XXX-XXXX'}
+)
+```
+
+---
+
+## Numeric Fields
+
+### IntegerField
+
+Validates that input is a valid integer.
+
+```python
+IntegerField(
+    max_value=None,
+    min_value=None,
+    step_size=None,
+    **kwargs
+)
+```
+
+<ParamField path="max_value" type="int">
+  Maximum allowed value.
+</ParamField>
+
+<ParamField path="min_value" type="int">
+  Minimum allowed value.
+</ParamField>
+
+<ParamField path="step_size" type="int">
+  Value must be a multiple of this number.
+</ParamField>
+
+Default widget: `NumberInput`
+
+```python
+age = forms.IntegerField(
+    min_value=0,
+    max_value=120,
+    error_messages={'invalid': 'Enter a valid age'}
+)
+```
+
+### FloatField
+
+Validates that input is a valid floating-point number.
+
+```python
+FloatField(
+    max_value=None,
+    min_value=None,
+    step_size=None,
+    **kwargs
+)
+```
+
+Default widget: `NumberInput`
+
+```python
+price = forms.FloatField(
+    min_value=0.0,
+    max_value=9999.99
+)
+```
+
+### DecimalField
+
+Validates that input is a valid decimal number.
+
+```python
+DecimalField(
+    max_value=None,
+    min_value=None,
+    max_digits=None,
+    decimal_places=None,
+    **kwargs
+)
+```
+
+<ParamField path="max_digits" type="int">
+  Maximum number of total digits allowed.
+</ParamField>
+
+<ParamField path="decimal_places" type="int">
+  Maximum number of decimal places allowed.
+</ParamField>
+
+Default widget: `NumberInput`
+
+```python
+amount = forms.DecimalField(
+    max_digits=10,
+    decimal_places=2,
+    min_value=0
+)
+```
+
+---
+
+## Date and Time Fields
+
+### DateField
+
+Validates that input is a valid date.
+
+```python
+DateField(
+    input_formats=None,
+    **kwargs
+)
+```
+
+<ParamField path="input_formats" type="list">
+  List of date format strings to accept (e.g., `['%Y-%m-%d', '%m/%d/%Y']`).
+</ParamField>
+
+Default widget: `DateInput`  
+Returns: `datetime.date` object
+
+```python
+birthdate = forms.DateField(
+    widget=forms.DateInput(attrs={'type': 'date'})
+)
+```
+
+### TimeField
+
+Validates that input is a valid time.
+
+```python
+TimeField(
+    input_formats=None,
+    **kwargs
+)
+```
+
+Default widget: `TimeInput`  
+Returns: `datetime.time` object
+
+```python
+appointment_time = forms.TimeField(
+    widget=forms.TimeInput(attrs={'type': 'time'})
+)
+```
+
+### DateTimeField
+
+Validates that input is a valid date and time.
+
+```python
+DateTimeField(
+    input_formats=None,
+    **kwargs
+)
+```
+
+Default widget: `DateTimeInput`  
+Returns: `datetime.datetime` object
+
+```python
+published_at = forms.DateTimeField()
+```
+
+### DurationField
+
+Validates that input is a valid duration.
+
+```python
+DurationField(**kwargs)
+```
+
+Accepts formats like: `"2 days"`, `"1:30:00"`, `"P3DT4H5M6S"` (ISO 8601)  
+Returns: `datetime.timedelta` object
+
+```python
+video_length = forms.DurationField()
+```
+
+---
+
+## Choice Fields
+
+### ChoiceField
+
+Validates that input is one of a set of valid choices.
+
+```python
+ChoiceField(
+    choices=(),
+    **kwargs
+)
+```
+
+<ParamField path="choices" type="list" required>
+  List of 2-tuples `(value, label)` or nested groups.
+</ParamField>
+
+Default widget: `Select`
+
+```python
+STATUS_CHOICES = [
+    ('draft', 'Draft'),
+    ('published', 'Published'),
+    ('archived', 'Archived'),
+]
+
+status = forms.ChoiceField(
+    choices=STATUS_CHOICES,
+    initial='draft'
+)
+```
+
+### TypedChoiceField
+
+Like ChoiceField but coerces the value to a specific type.
+
+```python
+TypedChoiceField(
+    choices=(),
+    coerce=lambda val: val,
+    empty_value="",
+    **kwargs
+)
+```
+
+<ParamField path="coerce" type="callable" default="lambda val: val">
+  Function to coerce the value to the desired type.
+</ParamField>
+
+<ParamField path="empty_value" type="any" default="''">
+  Value to return for empty input.
+</ParamField>
+
+```python
+rating = forms.TypedChoiceField(
+    choices=[(1, 'One'), (2, 'Two'), (3, 'Three')],
+    coerce=int
+)
+```
+
+### MultipleChoiceField
+
+Validates that input is one or more of valid choices.
+
+```python
+MultipleChoiceField(
+    choices=(),
+    **kwargs
+)
+```
+
+Default widget: `SelectMultiple`  
+Returns: List of strings
+
+```python
+TAG_CHOICES = [
+    ('python', 'Python'),
+    ('django', 'Django'),
+    ('javascript', 'JavaScript'),
+]
+
+tags = forms.MultipleChoiceField(
+    choices=TAG_CHOICES,
+    required=False
+)
+```
+
+### TypedMultipleChoiceField
+
+Like MultipleChoiceField but coerces values to a specific type.
+
+```python
+TypedMultipleChoiceField(
+    choices=(),
+    coerce=lambda val: val,
+    empty_value=[],
+    **kwargs
+)
+```
+
+```python
+years = forms.TypedMultipleChoiceField(
+    choices=[(2021, '2021'), (2022, '2022'), (2023, '2023')],
+    coerce=int
+)
+```
+
+---
+
+## Boolean Fields
+
+### BooleanField
+
+Validates that input is boolean (checkbox).
+
+```python
+BooleanField(**kwargs)
+```
+
+Default widget: `CheckboxInput`  
+Returns: `True` or `False`
+
+```python
+agree_to_terms = forms.BooleanField(
+    required=True,
+    error_messages={'required': 'You must agree to the terms'}
+)
+```
+
+### NullBooleanField
+
+A boolean field that accepts `None` as a value.
+
+```python
+NullBooleanField(**kwargs)
+```
+
+Default widget: `NullBooleanSelect`  
+Returns: `True`, `False`, or `None`
+
+```python
+is_active = forms.NullBooleanField(required=False)
+```
+
+---
+
+## File Fields
+
+### FileField
+
+Validates file upload.
+
+```python
+FileField(
+    max_length=None,
+    allow_empty_file=False,
+    **kwargs
+)
+```
+
+<ParamField path="max_length" type="int">
+  Maximum length of the filename.
+</ParamField>
+
+<ParamField path="allow_empty_file" type="bool" default="False">
+  Whether to allow empty files (0 bytes).
+</ParamField>
+
+Default widget: `ClearableFileInput`  
+Returns: `UploadedFile` object
+
+```python
+attachment = forms.FileField(
+    required=False,
+    help_text="Max file size: 5MB"
+)
+```
+
+### ImageField
+
+Validates that uploaded file is a valid image.
+
+```python
+ImageField(**kwargs)
+```
+
+Requires: Pillow library  
+Default widget: `ClearableFileInput`  
+Returns: `UploadedFile` object with image validation
+
+```python
+avatar = forms.ImageField(
+    required=False,
+    help_text="Upload a profile picture"
+)
+```
+
+### FilePathField
+
+Allows selection of files from server filesystem.
+
+```python
+FilePathField(
+    path,
+    match=None,
+    recursive=False,
+    allow_files=True,
+    allow_folders=False,
+    **kwargs
+)
+```
+
+<ParamField path="path" type="str" required>
+  Absolute filesystem path to directory.
+</ParamField>
+
+<ParamField path="match" type="str">
+  Regular expression pattern to filter filenames.
+</ParamField>
+
+<ParamField path="recursive" type="bool" default="False">
+  Whether to include subdirectories.
+</ParamField>
+
+<ParamField path="allow_files" type="bool" default="True">
+  Whether to include files.
+</ParamField>
+
+<ParamField path="allow_folders" type="bool" default="False">
+  Whether to include folders.
+</ParamField>
+
+```python
+template = forms.FilePathField(
+    path="/path/to/templates/",
+    match=r'\.html$',
+    recursive=True
+)
+```
+
+---
+
+## Network Fields
+
+### GenericIPAddressField
+
+Validates that input is a valid IP address.
+
+```python
+GenericIPAddressField(
+    protocol="both",
+    unpack_ipv4=False,
+    **kwargs
+)
+```
+
+<ParamField path="protocol" type="str" default="both">
+  Protocol to validate: `"both"`, `"ipv4"`, or `"ipv6"`.
+</ParamField>
+
+<ParamField path="unpack_ipv4" type="bool" default="False">
+  Whether to unpack IPv4-mapped IPv6 addresses.
+</ParamField>
+
+```python
+ip_address = forms.GenericIPAddressField(
+    protocol="ipv4"
+)
+```
+
+---
+
+## Special Fields
+
+### JSONField
+
+Validates that input is valid JSON.
+
+```python
+JSONField(
+    encoder=None,
+    decoder=None,
+    **kwargs
+)
+```
+
+<ParamField path="encoder" type="JSONEncoder">
+  Custom JSON encoder class.
+</ParamField>
+
+<ParamField path="decoder" type="JSONDecoder">
+  Custom JSON decoder class.
+</ParamField>
+
+Default widget: `Textarea`  
+Returns: Parsed JSON data (dict, list, etc.)
+
+```python
+metadata = forms.JSONField(
+    required=False,
+    help_text="Enter valid JSON"
+)
+```
+
+### UUIDField
+
+Validates that input is a valid UUID.
+
+```python
+UUIDField(**kwargs)
+```
+
+Returns: `uuid.UUID` object
+
+```python
+identifier = forms.UUIDField()
+```
+
+---
+
+## Composite Fields
+
+### ComboField
+
+Validates input against multiple fields sequentially.
+
+```python
+ComboField(
+    fields,
+    **kwargs
+)
+```
+
+<ParamField path="fields" type="list" required>
+  List of Field instances to validate against.
+</ParamField>
+
+```python
+secure_password = forms.ComboField(
+    fields=[
+        forms.CharField(min_length=8),
+        forms.RegexField(regex=r'[A-Z]', error_messages={'invalid': 'Need uppercase'}),
+        forms.RegexField(regex=r'[0-9]', error_messages={'invalid': 'Need number'}),
+    ]
+)
+```
+
+### MultiValueField
+
+Aggregates multiple fields into a single field.
+
+```python
+MultiValueField(
+    fields,
+    require_all_fields=True,
+    **kwargs
+)
+```
+
+<ParamField path="fields" type="list" required>
+  List of Field instances.
+</ParamField>
+
+<ParamField path="require_all_fields" type="bool" default="True">
+  Whether all sub-fields are required.
+</ParamField>
+
+Must implement `compress()` method to combine field values.
+
+### SplitDateTimeField
+
+Splits datetime input into separate date and time fields.
+
+```python
+SplitDateTimeField(
+    input_date_formats=None,
+    input_time_formats=None,
+    **kwargs
+)
+```
+
+Default widget: `SplitDateTimeWidget`  
+Returns: `datetime.datetime` object
+
+```python
+event_datetime = forms.SplitDateTimeField()
+```
+
+---
+
+## Field Methods
+
+All fields inherit these methods:
+
+### clean()
+
+```python
+field.clean(value) -> any
+```
+
+Validates and returns cleaned data. Raises `ValidationError` if invalid.
+
+### to_python()
+
+```python
+field.to_python(value) -> any
+```
+
+Converts input value to appropriate Python type.
+
+### validate()
+
+```python
+field.validate(value) -> None
+```
+
+Performs field-specific validation.
+
+### run_validators()
+
+```python
+field.run_validators(value) -> None
+```
+
+Runs all validators attached to the field.
+
+### has_changed()
+
+```python
+field.has_changed(initial, data) -> bool
+```
+
+Returns `True` if data differs from initial value.

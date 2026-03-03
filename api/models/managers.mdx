@@ -1,0 +1,322 @@
+---
+title: Manager API Reference
+description: Complete API reference for Django Manager class
+---
+
+# Manager API
+
+A Manager is the interface through which database query operations are provided to Django models. At least one Manager exists for every model in a Django application.
+
+## BaseManager
+
+The base class that all managers inherit from.
+
+### Class Attributes
+
+<ParamField path="auto_created" type="bool" default="False">
+  Set to True for the default 'objects' managers that are automatically created.
+</ParamField>
+
+<ParamField path="use_in_migrations" type="bool" default="False">
+  If set to True, the manager will be serialized into migrations and available in RunPython operations.
+</ParamField>
+
+**Reference:** `django/db/models/manager.py:10`
+
+### Methods
+
+#### get_queryset()
+
+Returns a new QuerySet object. Subclass this method to customize the behavior of the Manager.
+
+```python
+class DahlManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(author='Roald Dahl')
+```
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet object.
+</ResponseField>
+
+**Reference:** `django/db/models/manager.py:150`
+
+#### all()
+
+Returns a copy of the QuerySet. This is a shortcut for `get_queryset()`.
+
+```python
+Entry.objects.all()
+```
+
+<ResponseField name="return" type="QuerySet">
+  A QuerySet containing all objects.
+</ResponseField>
+
+**Reference:** `django/db/models/manager.py:157`
+
+#### db_manager()
+
+Returns a copy of the manager bound to a specific database.
+
+```python
+Entry.objects.db_manager('replica')
+```
+
+<ParamField path="using" type="str" optional>
+  The database alias to use.
+</ParamField>
+
+<ParamField path="hints" type="dict" optional>
+  Dictionary of hints for database routing.
+</ParamField>
+
+<ResponseField name="return" type="Manager">
+  A manager instance bound to the specified database.
+</ResponseField>
+
+**Reference:** `django/db/models/manager.py:136`
+
+#### check()
+
+Performs system checks on the manager.
+
+```python
+manager.check()
+```
+
+<ParamField path="**kwargs" type="dict">
+  Options for the check framework.
+</ParamField>
+
+<ResponseField name="return" type="list">
+  A list of error messages.
+</ResponseField>
+
+**Reference:** `django/db/models/manager.py:79`
+
+### Class Methods
+
+#### from_queryset()
+
+Creates a new Manager class that inherits methods from a custom QuerySet class.
+
+```python
+class PersonQuerySet(models.QuerySet):
+    def authors(self):
+        return self.filter(role='A')
+    
+    def editors(self):
+        return self.filter(role='E')
+
+PersonManager = models.Manager.from_queryset(PersonQuerySet)
+
+class Person(models.Model):
+    objects = PersonManager()
+```
+
+<ParamField path="queryset_class" type="type" required>
+  The QuerySet class to inherit methods from.
+</ParamField>
+
+<ParamField path="class_name" type="str" optional>
+  The name for the new Manager class. Auto-generated if not provided.
+</ParamField>
+
+<ResponseField name="return" type="type">
+  A new Manager class with methods from the QuerySet.
+</ResponseField>
+
+**Reference:** `django/db/models/manager.py:108`
+
+## Manager
+
+The default Manager class that inherits from BaseManager.
+
+```python
+class Entry(models.Model):
+    # Default manager
+    objects = models.Manager()
+    
+    # Custom manager
+    published = PublishedManager()
+```
+
+**Reference:** `django/db/models/manager.py:176`
+
+### Creating Custom Managers
+
+You can create custom managers by subclassing Manager:
+
+```python
+class PublishedManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(status='published')
+
+class Entry(models.Model):
+    title = models.CharField(max_length=200)
+    status = models.CharField(max_length=20)
+    
+    objects = models.Manager()  # Default manager
+    published = PublishedManager()  # Custom manager
+```
+
+## Properties
+
+### db
+
+Returns the database alias for read operations.
+
+```python
+Entry.objects.db  # 'default'
+Entry.objects.using('replica').db  # 'replica'
+```
+
+<ResponseField name="return" type="str">
+  The database alias.
+</ResponseField>
+
+**Reference:** `django/db/models/manager.py:143`
+
+## Manager Inheritance
+
+Managers are inherited by child models:
+
+```python
+class BaseModel(models.Model):
+    objects = models.Manager()
+    custom = CustomManager()
+    
+    class Meta:
+        abstract = True
+
+class ChildModel(BaseModel):
+    # Inherits both 'objects' and 'custom' managers
+    pass
+```
+
+## Default Manager
+
+The first Manager defined on a model becomes the default manager. You can specify a different default manager using `Meta.default_manager_name`:
+
+```python
+class Entry(models.Model):
+    published = PublishedManager()
+    objects = models.Manager()
+    
+    class Meta:
+        default_manager_name = 'objects'
+```
+
+## Base Manager
+
+You can specify which manager Django should use for relationships and other internal operations using `Meta.base_manager_name`:
+
+```python
+class Entry(models.Model):
+    objects = models.Manager()
+    published = PublishedManager()
+    
+    class Meta:
+        base_manager_name = 'objects'
+```
+
+## QuerySet Methods on Managers
+
+By default, Managers expose the following QuerySet methods:
+
+- `filter()`
+- `exclude()`
+- `annotate()`
+- `alias()`
+- `order_by()`
+- `reverse()`
+- `distinct()`
+- `values()`
+- `values_list()`
+- `dates()`
+- `datetimes()`
+- `select_related()`
+- `prefetch_related()`
+- `defer()`
+- `only()`
+- `using()`
+- `select_for_update()`
+- `get()`
+- `create()`
+- `get_or_create()`
+- `update_or_create()`
+- `bulk_create()`
+- `bulk_update()`
+- `count()`
+- `in_bulk()`
+- `iterator()`
+- `latest()`
+- `earliest()`
+- `first()`
+- `last()`
+- `aggregate()`
+- `exists()`
+- `contains()`
+- `update()`
+- `delete()`
+- `explain()`
+- `raw()`
+- `union()`
+- `intersection()`
+- `difference()`
+- `extra()`
+
+These methods are automatically copied from the QuerySet class and can be called directly on the Manager instance.
+
+## Calling Custom QuerySet Methods on Managers
+
+To make custom QuerySet methods available on your Manager, use `from_queryset()`:
+
+```python
+class PersonQuerySet(models.QuerySet):
+    def authors(self):
+        return self.filter(role='A')
+    
+    def editors(self):
+        return self.filter(role='E')
+
+class PersonManager(models.Manager):
+    def get_queryset(self):
+        return PersonQuerySet(self.model, using=self._db)
+
+PersonManager = PersonManager.from_queryset(PersonQuerySet)
+
+class Person(models.Model):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    role = models.CharField(max_length=1)
+    
+    people = PersonManager()
+
+# Now you can call:
+Person.people.authors()
+Person.people.editors()
+```
+
+## Manager Names
+
+By convention, the default Manager is named `objects`, but you can use any valid Python identifier:
+
+```python
+class Entry(models.Model):
+    # ...
+    entries = models.Manager()  # Custom name
+    published_entries = PublishedManager()
+```
+
+**Note:** Accessing managers on model instances raises an AttributeError. Managers are only accessible via model classes:
+
+```python
+# Correct
+Entry.objects.all()
+
+# Raises AttributeError
+entry = Entry.objects.get(pk=1)
+entry.objects.all()  # Error!
+```

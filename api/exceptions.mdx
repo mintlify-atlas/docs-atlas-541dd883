@@ -1,0 +1,469 @@
+---
+title: Exceptions
+description: Core Django exception classes
+---
+
+Django defines several exception classes for common error conditions.
+
+## Database Exceptions
+
+### ObjectDoesNotExist
+
+Raised when a requested object does not exist.
+
+```python
+from django.core.exceptions import ObjectDoesNotExist
+
+try:
+    obj = MyModel.objects.get(pk=999)
+except ObjectDoesNotExist:
+    print("Object not found")
+```
+
+This is the base class for model-specific `DoesNotExist` exceptions:
+
+```python
+try:
+    user = User.objects.get(username='nonexistent')
+except User.DoesNotExist:
+    print("User not found")
+```
+
+<Note>
+All model-specific `DoesNotExist` exceptions inherit from `ObjectDoesNotExist`, so you can catch any "does not exist" error with a single except clause.
+</Note>
+
+### MultipleObjectsReturned
+
+Raised when a query returns multiple objects but only one was expected.
+
+```python
+from django.core.exceptions import MultipleObjectsReturned
+
+try:
+    # Expecting only one user with this email
+    user = User.objects.get(email='user@example.com')
+except MultipleObjectsReturned:
+    print("Multiple users found with this email")
+```
+
+Like `DoesNotExist`, each model has its own `MultipleObjectsReturned` exception:
+
+```python
+try:
+    user = User.objects.get(first_name='John')
+except User.MultipleObjectsReturned:
+    print("Multiple users named John")
+```
+
+### ObjectNotUpdated
+
+Raised when an updated object no longer exists.
+
+```python
+from django.core.exceptions import ObjectNotUpdated
+```
+
+This exception is raised by update operations when the object being updated has been deleted.
+
+### FieldDoesNotExist
+
+Raised when a requested model field does not exist.
+
+```python
+from django.core.exceptions import FieldDoesNotExist
+
+try:
+    field = MyModel._meta.get_field('nonexistent_field')
+except FieldDoesNotExist:
+    print("Field does not exist")
+```
+
+### FieldError
+
+Raised when there's a problem with a model field.
+
+```python
+from django.core.exceptions import FieldError
+```
+
+This is a general exception for field-related problems, such as invalid field names in queries:
+
+```python
+try:
+    MyModel.objects.filter(nonexistent_field='value')
+except FieldError as e:
+    print(f"Field error: {e}")
+```
+
+### FieldFetchBlocked
+
+Raised when on-demand fetching of a model field is blocked.
+
+```python
+from django.core.exceptions import FieldFetchBlocked
+```
+
+Inherits from `FieldError`.
+
+## Validation Exceptions
+
+### ValidationError
+
+Raised when data validation fails.
+
+```python
+from django.core.exceptions import ValidationError
+
+raise ValidationError('This field is required')
+```
+
+#### Constructor
+
+```python
+ValidationError(message, code=None, params=None)
+```
+
+<ParamField path="message" type="string | list | dict" required>
+  The error message. Can be:
+  - A simple string
+  - A list of errors
+  - A dictionary mapping field names to lists of errors
+  - Another `ValidationError` instance
+</ParamField>
+
+<ParamField path="code" type="string">
+  An error code for programmatic identification.
+</ParamField>
+
+<ParamField path="params" type="dict">
+  Parameters for string formatting in the message.
+</ParamField>
+
+#### Examples
+
+**Simple validation error:**
+
+```python
+from django.core.exceptions import ValidationError
+
+raise ValidationError('Invalid email address')
+```
+
+**With error code:**
+
+```python
+raise ValidationError(
+    'Invalid email address',
+    code='invalid_email'
+)
+```
+
+**With parameters:**
+
+```python
+raise ValidationError(
+    'Ensure this value is less than %(limit_value)s.',
+    code='max_value',
+    params={'limit_value': 100}
+)
+```
+
+**Multiple errors:**
+
+```python
+raise ValidationError([
+    ValidationError('Error 1', code='error1'),
+    ValidationError('Error 2', code='error2'),
+])
+```
+
+**Field-specific errors:**
+
+```python
+raise ValidationError({
+    'email': ValidationError('Invalid email', code='invalid'),
+    'age': ValidationError('Must be 18 or older', code='min_age'),
+})
+```
+
+#### Properties
+
+<ParamField path="message_dict" type="dict">
+  Dictionary of field names to error messages. Only available if the error has an `error_dict`.
+</ParamField>
+
+<ParamField path="messages" type="list">
+  List of all error messages.
+</ParamField>
+
+#### Methods
+
+**update_error_dict(error_dict)**
+
+Updates the given error dictionary with errors from this `ValidationError`.
+
+```python
+error_dict = {}
+validation_error.update_error_dict(error_dict)
+```
+
+### NON_FIELD_ERRORS
+
+Constant used as the key for non-field errors in validation error dictionaries.
+
+```python
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
+
+raise ValidationError({
+    NON_FIELD_ERRORS: ['General error'],
+    'email': ['Invalid email'],
+})
+```
+
+Value: `"__all__"`
+
+## Security Exceptions
+
+### SuspiciousOperation
+
+Raised when a user did something suspicious.
+
+```python
+from django.core.exceptions import SuspiciousOperation
+
+raise SuspiciousOperation('Attempted directory traversal')
+```
+
+This is the base class for security-related exceptions. Specific subclasses include:
+
+### DisallowedHost
+
+Raised when the HTTP_HOST header contains an invalid value.
+
+```python
+from django.core.exceptions import DisallowedHost
+```
+
+Inherits from `SuspiciousOperation`.
+
+<Note>
+This is automatically raised by Django when a request's `Host` header doesn't match any value in `ALLOWED_HOSTS`.
+</Note>
+
+### DisallowedRedirect
+
+Raised when a redirect was too long or the scheme was not in the allowed list.
+
+```python
+from django.core.exceptions import DisallowedRedirect
+```
+
+Inherits from `SuspiciousOperation`.
+
+### SuspiciousFileOperation
+
+Raised when a suspicious filesystem operation was attempted.
+
+```python
+from django.core.exceptions import SuspiciousFileOperation
+
+raise SuspiciousFileOperation('Attempted to access file outside storage')
+```
+
+Inherits from `SuspiciousOperation`.
+
+### SuspiciousMultipartForm
+
+Raised for suspect MIME requests in multipart form data.
+
+```python
+from django.core.exceptions import SuspiciousMultipartForm
+```
+
+Inherits from `SuspiciousOperation`.
+
+### TooManyFieldsSent
+
+Raised when the number of fields in a GET or POST request exceeds `DATA_UPLOAD_MAX_NUMBER_FIELDS`.
+
+```python
+from django.core.exceptions import TooManyFieldsSent
+```
+
+Inherits from `SuspiciousOperation`.
+
+### TooManyFilesSent
+
+Raised when the number of files in a request exceeds `DATA_UPLOAD_MAX_NUMBER_FILES`.
+
+```python
+from django.core.exceptions import TooManyFilesSent
+```
+
+Inherits from `SuspiciousOperation`.
+
+### RequestDataTooBig
+
+Raised when the size of request data (excluding file uploads) exceeds `DATA_UPLOAD_MAX_MEMORY_SIZE`.
+
+```python
+from django.core.exceptions import RequestDataTooBig
+```
+
+Inherits from `SuspiciousOperation`.
+
+### PermissionDenied
+
+Raised when a user does not have permission to perform an action.
+
+```python
+from django.core.exceptions import PermissionDenied
+
+if not user.has_perm('myapp.change_mymodel'):
+    raise PermissionDenied('You do not have permission to edit this object')
+```
+
+<Note>
+Raising `PermissionDenied` in a view will return a 403 Forbidden response.
+</Note>
+
+## HTTP & Request Exceptions
+
+### BadRequest
+
+Raised when a request is malformed and cannot be processed.
+
+```python
+from django.core.exceptions import BadRequest
+
+raise BadRequest('Invalid JSON in request body')
+```
+
+Returns a 400 Bad Request response.
+
+### RequestAborted
+
+Raised when a request was closed before completion or timed out.
+
+```python
+from django.core.exceptions import RequestAborted
+```
+
+## Configuration Exceptions
+
+### ImproperlyConfigured
+
+Raised when Django is somehow improperly configured.
+
+```python
+from django.core.exceptions import ImproperlyConfigured
+
+if not settings.SECRET_KEY:
+    raise ImproperlyConfigured('SECRET_KEY must be set')
+```
+
+This exception is commonly raised during startup when settings or configuration is invalid.
+
+### AppRegistryNotReady
+
+Raised when the django.apps registry is not populated yet.
+
+```python
+from django.core.exceptions import AppRegistryNotReady
+
+try:
+    from django.apps import apps
+    apps.check_apps_ready()
+except AppRegistryNotReady:
+    print("Apps haven't been loaded yet")
+```
+
+### ViewDoesNotExist
+
+Raised when a requested view does not exist.
+
+```python
+from django.core.exceptions import ViewDoesNotExist
+```
+
+### MiddlewareNotUsed
+
+Raised when a middleware is not used in the server configuration.
+
+```python
+from django.core.exceptions import MiddlewareNotUsed
+
+class MyMiddleware:
+    def __init__(self, get_response):
+        if some_condition:
+            raise MiddlewareNotUsed('This middleware is not needed')
+        self.get_response = get_response
+```
+
+## Query Exceptions
+
+### EmptyResultSet
+
+Raised when a database query predicate is impossible (will never match any rows).
+
+```python
+from django.core.exceptions import EmptyResultSet
+```
+
+This is used internally by Django's ORM when it detects that a query cannot possibly return results.
+
+### FullResultSet
+
+Raised when a database query predicate matches everything.
+
+```python
+from django.core.exceptions import FullResultSet
+```
+
+## Async Exceptions
+
+### SynchronousOnlyOperation
+
+Raised when a user tried to call a sync-only function from an async context.
+
+```python
+from django.core.exceptions import SynchronousOnlyOperation
+```
+
+This exception helps prevent calling synchronous database operations from async views.
+
+## Example: Exception Handling
+
+```python
+from django.core.exceptions import (
+    ObjectDoesNotExist,
+    MultipleObjectsReturned,
+    ValidationError,
+    PermissionDenied,
+)
+from django.http import Http404
+
+def my_view(request, pk):
+    try:
+        # Try to get the object
+        obj = MyModel.objects.get(pk=pk)
+    except ObjectDoesNotExist:
+        # Return 404 if not found
+        raise Http404("Object not found")
+    except MultipleObjectsReturned:
+        # Handle unexpected duplicate
+        return HttpResponseServerError("Data integrity error")
+    
+    # Check permissions
+    if not request.user.has_perm('myapp.view_mymodel'):
+        raise PermissionDenied("You cannot view this object")
+    
+    # Validate some data
+    try:
+        obj.clean()
+    except ValidationError as e:
+        return JsonResponse({'errors': e.message_dict}, status=400)
+    
+    return render(request, 'myapp/detail.html', {'object': obj})
+```

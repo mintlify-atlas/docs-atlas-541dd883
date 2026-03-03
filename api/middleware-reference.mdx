@@ -1,0 +1,543 @@
+---
+title: 'Middleware'
+description: 'Django built-in middleware components API reference'
+---
+
+## Middleware Overview
+
+Middleware is a framework of hooks into Django's request/response processing. Each middleware component performs a specific function and is executed in order during request processing.
+
+**Middleware methods:**
+- `process_request(request)` - Called before the view
+- `process_response(request, response)` - Called after the view
+- `process_view(request, view_func, view_args, view_kwargs)` - Called just before the view
+- `process_exception(request, exception)` - Called when a view raises an exception
+
+---
+
+## Security Middleware
+
+### SecurityMiddleware
+
+```python
+'django.middleware.security.SecurityMiddleware'
+```
+
+Provides several security enhancements for HTTPS, HSTS, and other security headers.
+
+**Configuration:**
+
+<ParamField name="SECURE_SSL_REDIRECT" type="bool" default="False">
+  If `True`, redirects all non-HTTPS requests to HTTPS
+</ParamField>
+
+<ParamField name="SECURE_SSL_HOST" type="str" optional>
+  Host to redirect to for HTTPS (if different from the request host)
+</ParamField>
+
+<ParamField name="SECURE_REDIRECT_EXEMPT" type="list" default="[]">
+  List of regex patterns for URLs exempt from HTTPS redirect
+</ParamField>
+
+<ParamField name="SECURE_HSTS_SECONDS" type="int" default="0">
+  Number of seconds for Strict-Transport-Security header. Set to 0 to disable.
+</ParamField>
+
+<ParamField name="SECURE_HSTS_INCLUDE_SUBDOMAINS" type="bool" default="False">
+  Whether to include subdomains in HSTS policy
+</ParamField>
+
+<ParamField name="SECURE_HSTS_PRELOAD" type="bool" default="False">
+  Whether to add the preload directive to HSTS header
+</ParamField>
+
+<ParamField name="SECURE_CONTENT_TYPE_NOSNIFF" type="bool" default="True">
+  Whether to set `X-Content-Type-Options: nosniff` header
+</ParamField>
+
+<ParamField name="SECURE_REFERRER_POLICY" type="str" optional>
+  Value for Referrer-Policy header (e.g., `'same-origin'`, `'strict-origin-when-cross-origin'`)
+</ParamField>
+
+<ParamField name="SECURE_CROSS_ORIGIN_OPENER_POLICY" type="str" optional>
+  Value for Cross-Origin-Opener-Policy header (e.g., `'same-origin'`)
+</ParamField>
+
+**Example:**
+
+```python
+# settings.py
+SECURE_SSL_REDIRECT = True
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+```
+
+---
+
+## Session Middleware
+
+### SessionMiddleware
+
+```python
+'django.contrib.sessions.middleware.SessionMiddleware'
+```
+
+Enables session support. Adds `request.session` attribute.
+
+**Configuration:**
+
+<ParamField name="SESSION_ENGINE" type="str" default="'django.contrib.sessions.backends.db'">
+  Session backend to use:
+  - `'django.contrib.sessions.backends.db'` - Database-backed sessions
+  - `'django.contrib.sessions.backends.cache'` - Cache-backed sessions
+  - `'django.contrib.sessions.backends.cached_db'` - Database with cache
+  - `'django.contrib.sessions.backends.file'` - File-based sessions
+  - `'django.contrib.sessions.backends.signed_cookies'` - Cookie-based sessions
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_NAME" type="str" default="'sessionid'">
+  Name of the session cookie
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_AGE" type="int" default="1209600">
+  Age of session cookies in seconds (default: 2 weeks)
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_DOMAIN" type="str" optional>
+  Domain for session cookies
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_PATH" type="str" default="'/'">
+  Path for session cookies
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_SECURE" type="bool" default="False">
+  Whether to use secure cookies (HTTPS only)
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_HTTPONLY" type="bool" default="True">
+  Whether to use HttpOnly flag on session cookies
+</ParamField>
+
+<ParamField name="SESSION_COOKIE_SAMESITE" type="str" default="'Lax'">
+  SameSite attribute: `'Strict'`, `'Lax'`, or `'None'`
+</ParamField>
+
+<ParamField name="SESSION_SAVE_EVERY_REQUEST" type="bool" default="False">
+  Whether to save the session on every request
+</ParamField>
+
+**Example:**
+
+```python
+# settings.py
+SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
+SESSION_COOKIE_AGE = 86400  # 1 day
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Strict'
+```
+
+---
+
+## CSRF Protection
+
+### CsrfViewMiddleware
+
+```python
+'django.middleware.csrf.CsrfViewMiddleware'
+```
+
+Provides Cross-Site Request Forgery protection by validating CSRF tokens on POST requests.
+
+**Configuration:**
+
+<ParamField name="CSRF_COOKIE_NAME" type="str" default="'csrftoken'">
+  Name of the CSRF cookie
+</ParamField>
+
+<ParamField name="CSRF_COOKIE_AGE" type="int" optional>
+  Age of CSRF cookies in seconds. If None, uses SESSION_COOKIE_AGE.
+</ParamField>
+
+<ParamField name="CSRF_COOKIE_DOMAIN" type="str" optional>
+  Domain for CSRF cookies
+</ParamField>
+
+<ParamField name="CSRF_COOKIE_PATH" type="str" default="'/'">
+  Path for CSRF cookies
+</ParamField>
+
+<ParamField name="CSRF_COOKIE_SECURE" type="bool" default="False">
+  Whether to use secure cookies (HTTPS only)
+</ParamField>
+
+<ParamField name="CSRF_COOKIE_HTTPONLY" type="bool" default="False">
+  Whether to use HttpOnly flag. Note: Setting to `True` prevents JavaScript access to the token.
+</ParamField>
+
+<ParamField name="CSRF_COOKIE_SAMESITE" type="str" default="'Lax'">
+  SameSite attribute: `'Strict'`, `'Lax'`, or `'None'`
+</ParamField>
+
+<ParamField name="CSRF_TRUSTED_ORIGINS" type="list" default="[]">
+  List of trusted origins for unsafe requests (POST, PUT, etc.). Use format: `['https://example.com', 'https://*.example.com']`
+</ParamField>
+
+<ParamField name="CSRF_FAILURE_VIEW" type="str" default="'django.views.csrf.csrf_failure'">
+  View function to call when CSRF validation fails
+</ParamField>
+
+<ParamField name="CSRF_USE_SESSIONS" type="bool" default="False">
+  Whether to store CSRF token in the session instead of a cookie
+</ParamField>
+
+**Template Usage:**
+
+```django
+<form method="post">
+  {% csrf_token %}
+  <!-- form fields -->
+</form>
+```
+
+**Exempting Views:**
+
+```python
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def my_api_view(request):
+    # This view doesn't require CSRF validation
+    pass
+```
+
+**Example:**
+
+```python
+# settings.py
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'Strict'
+CSRF_TRUSTED_ORIGINS = [
+    'https://example.com',
+    'https://*.example.com',
+]
+```
+
+---
+
+## Common Middleware
+
+### CommonMiddleware
+
+```python
+'django.middleware.common.CommonMiddleware'
+```
+
+Provides common web development conveniences:
+- URL rewriting based on `APPEND_SLASH` and `PREPEND_WWW`
+- Sets `Content-Length` header
+- Forbids user agents in `DISALLOWED_USER_AGENTS`
+
+**Configuration:**
+
+<ParamField name="APPEND_SLASH" type="bool" default="True">
+  If `True`, redirects URLs without a trailing slash to the version with a trailing slash (if it exists in URLconf)
+</ParamField>
+
+<ParamField name="PREPEND_WWW" type="bool" default="False">
+  If `True`, redirects URLs without `www.` prefix to the version with `www.`
+</ParamField>
+
+<ParamField name="DISALLOWED_USER_AGENTS" type="list" default="[]">
+  List of compiled regular expressions for user agents to forbid
+</ParamField>
+
+**Example:**
+
+```python
+# settings.py
+import re
+
+APPEND_SLASH = True
+DISALLOWED_USER_AGENTS = [
+    re.compile(r'BadBot'),
+    re.compile(r'SpamCrawler'),
+]
+```
+
+### BrokenLinkEmailsMiddleware
+
+```python
+'django.middleware.common.BrokenLinkEmailsMiddleware'
+```
+
+Sends emails to site managers for broken links (404 errors).
+
+**Configuration:**
+
+<ParamField name="MANAGERS" type="list" required>
+  List of tuples: `[('Name', 'email@example.com')]`
+</ParamField>
+
+<ParamField name="IGNORABLE_404_URLS" type="list" default="[]">
+  List of compiled regular expressions for URLs to ignore
+</ParamField>
+
+---
+
+## Clickjacking Protection
+
+### XFrameOptionsMiddleware
+
+```python
+'django.middleware.clickjacking.XFrameOptionsMiddleware'
+```
+
+Protects against clickjacking by setting the `X-Frame-Options` header.
+
+**Configuration:**
+
+<ParamField name="X_FRAME_OPTIONS" type="str" default="'DENY'">
+  Value for X-Frame-Options header:
+  - `'DENY'` - Page cannot be displayed in a frame
+  - `'SAMEORIGIN'` - Page can only be displayed in a frame on the same origin
+</ParamField>
+
+**Per-View Override:**
+
+```python
+from django.views.decorators.clickjacking import xframe_options_exempt, xframe_options_sameorigin
+
+@xframe_options_exempt
+def exempt_view(request):
+    # This view can be displayed in a frame
+    pass
+
+@xframe_options_sameorigin
+def sameorigin_view(request):
+    # Override to SAMEORIGIN for this view
+    pass
+```
+
+---
+
+## Compression Middleware
+
+### GZipMiddleware
+
+```python
+'django.middleware.gzip.GZipMiddleware'
+```
+
+Compresses content for browsers that support gzip compression.
+
+**Features:**
+- Compresses responses larger than 200 bytes
+- Sets `Vary: Accept-Encoding` header
+- Skips responses that already have `Content-Encoding`
+- Only compresses if the result is smaller
+
+**Configuration:**
+
+<ResponseField name="max_random_bytes" type="int" default="100">
+  Maximum number of random bytes to add for compression side-channel attack mitigation
+</ResponseField>
+
+<Warning>
+Place `GZipMiddleware` before any middleware that might change or use the response body.
+</Warning>
+
+---
+
+## Content Security Policy
+
+### CspMiddleware
+
+```python
+'django.middleware.csp.CspMiddleware'
+```
+
+Sets Content Security Policy headers.
+
+**Configuration:**
+
+<ParamField name="CSP_DEFAULT_SRC" type="list" optional>
+  Default source list for CSP directives
+</ParamField>
+
+<ParamField name="CSP_SCRIPT_SRC" type="list" optional>
+  Allowed sources for JavaScript
+</ParamField>
+
+<ParamField name="CSP_STYLE_SRC" type="list" optional>
+  Allowed sources for CSS
+</ParamField>
+
+<ParamField name="CSP_IMG_SRC" type="list" optional>
+  Allowed sources for images
+</ParamField>
+
+<ParamField name="CSP_REPORT_URI" type="str" optional>
+  URI to send CSP violation reports to
+</ParamField>
+
+**Example:**
+
+```python
+# settings.py
+CSP_DEFAULT_SRC = ["'self'"]
+CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'", "https://cdn.example.com"]
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]
+CSP_IMG_SRC = ["'self'", "data:", "https:"]
+CSP_REPORT_URI = "/csp-report/"
+```
+
+---
+
+## Locale Middleware
+
+### LocaleMiddleware
+
+```python
+'django.middleware.locale.LocaleMiddleware'
+```
+
+Enables language selection based on request data.
+
+**Language Selection Order:**
+1. Language prefix in URL (if using `i18n_patterns`)
+2. Session or cookie
+3. `Accept-Language` HTTP header
+4. `LANGUAGE_CODE` setting
+
+**Configuration:**
+
+<ParamField name="LANGUAGE_COOKIE_NAME" type="str" default="'django_language'">
+  Name of the language cookie
+</ParamField>
+
+<ParamField name="LANGUAGE_COOKIE_AGE" type="int" optional>
+  Age of language cookie in seconds
+</ParamField>
+
+<ParamField name="LANGUAGE_COOKIE_DOMAIN" type="str" optional>
+  Domain for language cookie
+</ParamField>
+
+<ParamField name="LANGUAGE_COOKIE_PATH" type="str" default="'/'">
+  Path for language cookie
+</ParamField>
+
+---
+
+## Cache Middleware
+
+### UpdateCacheMiddleware & FetchFromCacheMiddleware
+
+```python
+'django.middleware.cache.UpdateCacheMiddleware',
+# ... other middleware ...
+'django.middleware.cache.FetchFromCacheMiddleware',
+```
+
+Provides site-wide caching. Must be used as a pair.
+
+<Warning>
+`UpdateCacheMiddleware` must be first, and `FetchFromCacheMiddleware` must be last in `MIDDLEWARE`.
+</Warning>
+
+**Configuration:**
+
+<ParamField name="CACHE_MIDDLEWARE_ALIAS" type="str" default="'default'">
+  Cache alias to use
+</ParamField>
+
+<ParamField name="CACHE_MIDDLEWARE_SECONDS" type="int" default="600">
+  Cache timeout in seconds
+</ParamField>
+
+<ParamField name="CACHE_MIDDLEWARE_KEY_PREFIX" type="str" default="''">
+  Prefix for cache keys
+</ParamField>
+
+**Example:**
+
+```python
+# settings.py
+MIDDLEWARE = [
+    'django.middleware.cache.UpdateCacheMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',
+]
+
+CACHE_MIDDLEWARE_ALIAS = 'default'
+CACHE_MIDDLEWARE_SECONDS = 600
+CACHE_MIDDLEWARE_KEY_PREFIX = 'mysite'
+```
+
+---
+
+## Creating Custom Middleware
+
+### Function-based Middleware
+
+```python
+def simple_middleware(get_response):
+    # One-time configuration and initialization.
+    
+    def middleware(request):
+        # Code to execute for each request before the view
+        
+        response = get_response(request)
+        
+        # Code to execute for each request/response after the view
+        
+        return response
+    
+    return middleware
+```
+
+### Class-based Middleware
+
+```python
+class SimpleMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+        # One-time configuration and initialization.
+    
+    def __call__(self, request):
+        # Code to execute for each request before the view
+        
+        response = self.get_response(request)
+        
+        # Code to execute for each request/response after the view
+        
+        return response
+    
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        # Called just before Django calls the view
+        pass
+    
+    def process_exception(self, request, exception):
+        # Called when a view raises an exception
+        pass
+```
+
+### Using MiddlewareMixin
+
+```python
+from django.utils.deprecation import MiddlewareMixin
+
+class CustomMiddleware(MiddlewareMixin):
+    def process_request(self, request):
+        # Called before the view
+        pass
+    
+    def process_response(self, request, response):
+        # Called after the view
+        return response
+```

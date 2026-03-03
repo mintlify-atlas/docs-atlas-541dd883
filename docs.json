@@ -1,122 +1,170 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Django",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#0C4B33",
+    "light": "#44B78B",
+    "dark": "#0A3626"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/django/django"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/django/django"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/architecture",
+              "concepts/models",
+              "concepts/views",
+              "concepts/templates",
+              "concepts/urls",
+              "concepts/forms",
+              "concepts/middleware"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Database & ORM",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "database/models-overview",
+              "database/queries",
+              "database/aggregation",
+              "database/transactions",
+              "database/migrations",
+              "database/multiple-databases"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Advanced Topics",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "advanced/async",
+              "advanced/cache",
+              "advanced/signals",
+              "advanced/tasks",
+              "advanced/class-based-views",
+              "advanced/security"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/authentication",
+              "guides/file-uploads",
+              "guides/email",
+              "guides/pagination",
+              "guides/internationalization",
+              "guides/testing",
+              "guides/deployment"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core APIs",
             "pages": [
-              "api-reference/introduction"
+              "api/settings",
+              "api/django-admin",
+              "api/applications",
+              "api/exceptions"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Models",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/models/fields",
+              "api/models/querysets",
+              "api/models/managers",
+              "api/models/relations",
+              "api/models/meta-options"
+            ]
+          },
+          {
+            "group": "Views & URLs",
+            "pages": [
+              "api/views",
+              "api/urls",
+              "api/request-response",
+              "api/middleware-reference"
+            ]
+          },
+          {
+            "group": "Templates",
+            "pages": [
+              "api/templates/engine",
+              "api/templates/built-in-tags",
+              "api/templates/built-in-filters",
+              "api/templates/context-processors"
+            ]
+          },
+          {
+            "group": "Forms",
+            "pages": [
+              "api/forms/api",
+              "api/forms/fields",
+              "api/forms/widgets",
+              "api/forms/validation"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utils/validators",
+              "api/utils/pagination",
+              "api/utils/cache",
+              "api/utils/signals"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Contrib Packages",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "contrib/index"
+            ]
+          },
+          {
+            "group": "Built-in Apps",
+            "pages": [
+              "contrib/admin",
+              "contrib/auth",
+              "contrib/contenttypes",
+              "contrib/messages",
+              "contrib/sessions",
+              "contrib/staticfiles",
+              "contrib/gis",
+              "contrib/postgres",
+              "contrib/syndication",
+              "contrib/sitemaps"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

@@ -1,0 +1,368 @@
+---
+title: Model Field Types
+description: Complete API reference for Django model field types and their parameters
+---
+
+# Model Field Types
+
+All model fields inherit from the base `Field` class and accept common parameters.
+
+## Base Field Class
+
+### Field
+
+Base class for all field types.
+
+<ParamField path="verbose_name" type="str" optional>
+  Human-readable name for the field. If not provided, Django will automatically create it from the field name.
+</ParamField>
+
+<ParamField path="name" type="str" optional>
+  The name of the field. In most cases, this is automatically set by Django.
+</ParamField>
+
+<ParamField path="primary_key" type="bool" default="False">
+  If True, this field is the primary key for the model.
+</ParamField>
+
+<ParamField path="max_length" type="int" optional>
+  Maximum length for string-based fields. Required for CharField and its subclasses.
+</ParamField>
+
+<ParamField path="unique" type="bool" default="False">
+  If True, this field must be unique throughout the table.
+</ParamField>
+
+<ParamField path="blank" type="bool" default="False">
+  If True, the field is allowed to be blank in forms. Note this is different from null.
+</ParamField>
+
+<ParamField path="null" type="bool" default="False">
+  If True, Django will store empty values as NULL in the database.
+</ParamField>
+
+<ParamField path="db_index" type="bool" default="False">
+  If True, a database index will be created for this field.
+</ParamField>
+
+<ParamField path="default" optional>
+  The default value for the field. Can be a value or a callable object.
+</ParamField>
+
+<ParamField path="db_default" optional>
+  A database-computed default value (expression or literal). Requires database support.
+</ParamField>
+
+<ParamField path="editable" type="bool" default="True">
+  If False, the field will not be displayed in the admin or any other ModelForm.
+</ParamField>
+
+<ParamField path="serialize" type="bool" default="True">
+  If False, the field will not be serialized when the model is passed to Django's serializers.
+</ParamField>
+
+<ParamField path="unique_for_date" type="str" optional>
+  Set this to the name of a DateField or DateTimeField to require that this field be unique for the value of the date field.
+</ParamField>
+
+<ParamField path="unique_for_month" type="str" optional>
+  Like unique_for_date, but requires the field to be unique with respect to the month.
+</ParamField>
+
+<ParamField path="unique_for_year" type="str" optional>
+  Like unique_for_date and unique_for_month, but for the year.
+</ParamField>
+
+<ParamField path="choices" type="Iterable" optional>
+  An iterable of 2-tuples to use as choices for this field. If provided, the default form widget will be a select box.
+</ParamField>
+
+<ParamField path="help_text" type="str" default="''">
+  Extra "help" text to be displayed with the form widget.
+</ParamField>
+
+<ParamField path="db_column" type="str" optional>
+  The name of the database column to use for this field. If not provided, Django will use the field's name.
+</ParamField>
+
+<ParamField path="db_comment" type="str" optional>
+  A comment on the database column. Requires database support for comments.
+</ParamField>
+
+<ParamField path="db_tablespace" type="str" optional>
+  The name of the database tablespace to use for this field's index, if applicable.
+</ParamField>
+
+<ParamField path="validators" type="list" default="[]">
+  A list of validators to run for this field.
+</ParamField>
+
+<ParamField path="error_messages" type="dict" optional>
+  A dictionary of error messages to override the default messages that the field will raise.
+</ParamField>
+
+## String Fields
+
+### CharField
+
+A string field for small- to large-sized strings.
+
+<ParamField path="max_length" type="int" required>
+  The maximum length (in characters) of the field. Required.
+</ParamField>
+
+<ParamField path="db_collation" type="str" optional>
+  The database collation name for the field.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:1204`
+
+### TextField
+
+A large text field.
+
+<ParamField path="db_collation" type="str" optional>
+  The database collation name for the field.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2482`
+
+### EmailField
+
+A CharField that checks that the value is a valid email address.
+
+<ParamField path="max_length" type="int" default="254">
+  Maximum length defaults to 254 to comply with RFCs 3696 and 5321.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:1955`
+
+### SlugField
+
+A field for storing URL slugs (short labels containing only letters, numbers, underscores or hyphens).
+
+<ParamField path="max_length" type="int" default="50">
+  Maximum length of the slug.
+</ParamField>
+
+<ParamField path="db_index" type="bool" default="True">
+  Creates a database index by default.
+</ParamField>
+
+<ParamField path="allow_unicode" type="bool" default="False">
+  If True, the field accepts Unicode letters in addition to ASCII letters.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2445`
+
+### URLField
+
+A CharField for a URL, validated by URLValidator.
+
+<ParamField path="max_length" type="int" default="200">
+  Maximum length defaults to 200.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2677`
+
+## Numeric Fields
+
+### IntegerField
+
+An integer field. Values from -2147483648 to 2147483647 are safe in all databases supported by Django.
+
+**Reference:** `django/db/models/fields/__init__.py:2099`
+
+### BigIntegerField
+
+A 64-bit integer. Values from -9223372036854775808 to 9223372036854775807 are safe.
+
+**Reference:** `django/db/models/fields/__init__.py:2199`
+
+### SmallIntegerField
+
+Like IntegerField, but only allows values under a certain (database-dependent) point.
+
+**Reference:** `django/db/models/fields/__init__.py:2216`
+
+### PositiveIntegerField
+
+Like IntegerField, but must be either positive or zero (0). Values from 0 to 2147483647 are safe.
+
+**Reference:** `django/db/models/fields/__init__.py:2415`
+
+### PositiveBigIntegerField
+
+Like PositiveIntegerField, but allows values from 0 to 9223372036854775807.
+
+**Reference:** `django/db/models/fields/__init__.py:2400`
+
+### PositiveSmallIntegerField
+
+Like PositiveIntegerField, but only allows values under a certain (database-dependent) point.
+
+**Reference:** `django/db/models/fields/__init__.py:2430`
+
+### FloatField
+
+A floating-point number represented in Python by a float instance.
+
+**Reference:** `django/db/models/fields/__init__.py:2057`
+
+### DecimalField
+
+A fixed-precision decimal number, represented in Python by a Decimal instance.
+
+<ParamField path="max_digits" type="int" required>
+  The maximum number of digits allowed in the number.
+</ParamField>
+
+<ParamField path="decimal_places" type="int" required>
+  The number of decimal places to store with the number.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:1698`
+
+## Boolean Fields
+
+### BooleanField
+
+A true/false field. The default form widget is CheckboxInput, or NullBooleanSelect if null=True.
+
+**Reference:** `django/db/models/fields/__init__.py:1158`
+
+## Date and Time Fields
+
+### DateField
+
+A date, represented in Python by a datetime.date instance.
+
+<ParamField path="auto_now" type="bool" default="False">
+  Automatically set the field to now every time the object is saved.
+</ParamField>
+
+<ParamField path="auto_now_add" type="bool" default="False">
+  Automatically set the field to now when the object is first created.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:1422`
+
+### DateTimeField
+
+A date and time, represented in Python by a datetime.datetime instance.
+
+<ParamField path="auto_now" type="bool" default="False">
+  Automatically set the field to now every time the object is saved.
+</ParamField>
+
+<ParamField path="auto_now_add" type="bool" default="False">
+  Automatically set the field to now when the object is first created.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:1557`
+
+### TimeField
+
+A time, represented in Python by a datetime.time instance.
+
+<ParamField path="auto_now" type="bool" default="False">
+  Automatically set the field to now every time the object is saved.
+</ParamField>
+
+<ParamField path="auto_now_add" type="bool" default="False">
+  Automatically set the field to now when the object is first created.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2559`
+
+### DurationField
+
+A field for storing periods of time, represented in Python by timedelta.
+
+**Reference:** `django/db/models/fields/__init__.py:1894`
+
+## Binary and Other Fields
+
+### BinaryField
+
+A field to store raw binary data.
+
+<ParamField path="editable" type="bool" default="False">
+  Binary fields are not editable by default.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2702`
+
+### UUIDField
+
+A field for storing universally unique identifiers. Uses Python's UUID class.
+
+**Reference:** `django/db/models/fields/__init__.py:2766`
+
+### FilePathField
+
+A CharField whose choices are limited to the filenames in a certain directory on the filesystem.
+
+<ParamField path="path" type="str" required>
+  The absolute filesystem path to a directory from which this FilePathField should get its choices.
+</ParamField>
+
+<ParamField path="match" type="str" optional>
+  A regular expression as a string that FilePathField will use to filter filenames.
+</ParamField>
+
+<ParamField path="recursive" type="bool" default="False">
+  If True, includes subdirectories of path.
+</ParamField>
+
+<ParamField path="allow_files" type="bool" default="True">
+  If True, includes files in the specified location.
+</ParamField>
+
+<ParamField path="allow_folders" type="bool" default="False">
+  If True, includes folders in the specified location.
+</ParamField>
+
+<ParamField path="max_length" type="int" default="100">
+  Maximum length of the path.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:1981`
+
+### GenericIPAddressField
+
+An IPv4 or IPv6 address, in string format (e.g. 192.0.2.30 or 2a02:42fe::4).
+
+<ParamField path="protocol" type="str" default="'both'">
+  Limits valid inputs to the specified protocol. Accepted values are 'both', 'IPv4', or 'IPv6'.
+</ParamField>
+
+<ParamField path="unpack_ipv4" type="bool" default="False">
+  If True, unpacks IPv4-mapped IPv6 addresses like ::ffff:192.0.2.1.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2254`
+
+## Auto Fields
+
+### AutoField
+
+An IntegerField that automatically increments.
+
+<ParamField path="primary_key" type="bool" default="True">
+  Auto fields must be primary keys.
+</ParamField>
+
+**Reference:** `django/db/models/fields/__init__.py:2910`
+
+### BigAutoField
+
+A 64-bit integer that automatically increments.
+
+**Reference:** `django/db/models/fields/__init__.py:2918`
+
+### SmallAutoField
+
+Like AutoField, but only allows values under a certain (database-dependent) limit.
+
+**Reference:** `django/db/models/fields/__init__.py:2926`

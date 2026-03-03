@@ -1,0 +1,443 @@
+---
+title: Pagination
+description: Paginator class for splitting querysets and lists into pages
+---
+
+## Overview
+
+Django's pagination system allows you to split large result sets into discrete pages. The `Paginator` class handles the logic of dividing items across pages.
+
+## Paginator
+
+The main pagination class for splitting querysets or lists into pages.
+
+```python
+from django.core.paginator import Paginator
+
+paginator = Paginator(
+    object_list,
+    per_page,
+    orphans=0,
+    allow_empty_first_page=True,
+    error_messages=None
+)
+```
+
+<ParamField path="object_list" type="QuerySet | list" required>
+  The list or QuerySet to paginate. Should be ordered for consistent results.
+</ParamField>
+
+<ParamField path="per_page" type="int" required>
+  Number of items to display per page
+</ParamField>
+
+<ParamField path="orphans" type="int" default="0">
+  Minimum number of items allowed on the last page. If the last page would have fewer than this, items are added to the previous page instead.
+</ParamField>
+
+<ParamField path="allow_empty_first_page" type="bool" default="True">
+  Whether the first page is allowed to be empty
+</ParamField>
+
+<ParamField path="error_messages" type="dict" default="None">
+  Custom error messages for 'invalid_page', 'min_page', and 'no_results'
+</ParamField>
+
+### Properties
+
+<ResponseField name="count" type="int">
+  Total number of objects across all pages
+</ResponseField>
+
+<ResponseField name="num_pages" type="int">
+  Total number of pages
+</ResponseField>
+
+<ResponseField name="page_range" type="range">
+  1-based range of page numbers for iteration
+</ResponseField>
+
+### Methods
+
+#### page()
+
+Returns a Page object for the given page number.
+
+```python
+page = paginator.page(number)
+```
+
+<ParamField path="number" type="int" required>
+  1-based page number to retrieve
+</ParamField>
+
+<ResponseField name="return" type="Page">
+  Page object for the specified page number
+</ResponseField>
+
+**Raises:**
+- `PageNotAnInteger` - If the page number is not an integer
+- `EmptyPage` - If the page number is out of range
+
+#### get_page()
+
+Returns a valid page even if the page argument isn't valid. Returns page 1 for invalid page numbers and the last page for out-of-range numbers.
+
+```python
+page = paginator.get_page(number)
+```
+
+<ParamField path="number" type="int | str" required>
+  Page number to retrieve (can be invalid)
+</ParamField>
+
+<ResponseField name="return" type="Page">
+  Valid Page object (never raises exceptions)
+</ResponseField>
+
+#### validate_number()
+
+Validates that a page number is valid.
+
+```python
+valid_number = paginator.validate_number(number)
+```
+
+<ParamField path="number" type="int" required>
+  Page number to validate
+</ParamField>
+
+<ResponseField name="return" type="int">
+  The validated page number
+</ResponseField>
+
+#### get_elided_page_range()
+
+Returns a 1-based range of pages with some values elided for large page ranges.
+
+```python
+page_range = paginator.get_elided_page_range(
+    number=1,
+    on_each_side=3,
+    on_ends=2
+)
+```
+
+<ParamField path="number" type="int" default="1">
+  Current page number
+</ParamField>
+
+<ParamField path="on_each_side" type="int" default="3">
+  Number of pages to show on each side of current page
+</ParamField>
+
+<ParamField path="on_ends" type="int" default="2">
+  Number of pages to show at the beginning and end
+</ParamField>
+
+<ResponseField name="return" type="generator">
+  Generator yielding page numbers and ellipsis markers
+</ResponseField>
+
+**Example output:** `1, 2, '…', 40, 41, 42, 43, 44, 45, 46, '…', 49, 50`
+
+### Usage Example
+
+```python
+from django.core.paginator import Paginator
+from myapp.models import Article
+
+# Get all articles
+articles = Article.objects.all()
+
+# Create a paginator with 25 items per page
+paginator = Paginator(articles, 25)
+
+# Get total pages
+print(paginator.num_pages)  # e.g., 4
+
+# Get total count
+print(paginator.count)  # e.g., 100
+
+# Get a specific page
+page = paginator.page(1)
+for article in page:
+    print(article.title)
+```
+
+## AsyncPaginator
+
+Async version of Paginator for use with async views and querysets.
+
+```python
+from django.core.paginator import AsyncPaginator
+
+paginator = AsyncPaginator(
+    object_list,
+    per_page,
+    orphans=0,
+    allow_empty_first_page=True,
+    error_messages=None
+)
+```
+
+Parameters are the same as `Paginator`. All methods are async versions with `a` prefix:
+
+- `await paginator.acount()`
+- `await paginator.anum_pages()`
+- `await paginator.apage(number)`
+- `await paginator.aget_page(number)`
+- `await paginator.avalidate_number(number)`
+- `await paginator.aget_elided_page_range()`
+
+**Usage:**
+```python
+async def my_view(request):
+    articles = Article.objects.all()
+    paginator = AsyncPaginator(articles, 25)
+    
+    page_number = request.GET.get('page', 1)
+    page = await paginator.aget_page(page_number)
+    
+    return render(request, 'articles.html', {'page': page})
+```
+
+## Page
+
+Represents a single page of results.
+
+```python
+class Page(object_list, number, paginator)
+```
+
+<ParamField path="object_list" type="list" required>
+  List of objects on this page
+</ParamField>
+
+<ParamField path="number" type="int" required>
+  1-based page number
+</ParamField>
+
+<ParamField path="paginator" type="Paginator" required>
+  The parent Paginator instance
+</ParamField>
+
+### Properties
+
+<ResponseField name="object_list" type="list">
+  The list of objects on this page
+</ResponseField>
+
+<ResponseField name="number" type="int">
+  The 1-based page number
+</ResponseField>
+
+<ResponseField name="paginator" type="Paginator">
+  The parent Paginator instance
+</ResponseField>
+
+### Methods
+
+#### has_next()
+
+Returns whether there's a next page.
+
+```python
+if page.has_next():
+    next_page = paginator.page(page.next_page_number())
+```
+
+<ResponseField name="return" type="bool">
+  True if there is a next page
+</ResponseField>
+
+#### has_previous()
+
+Returns whether there's a previous page.
+
+```python
+if page.has_previous():
+    prev_page = paginator.page(page.previous_page_number())
+```
+
+<ResponseField name="return" type="bool">
+  True if there is a previous page
+</ResponseField>
+
+#### has_other_pages()
+
+Returns whether there are any other pages.
+
+```python
+if page.has_other_pages():
+    # Show pagination controls
+    pass
+```
+
+<ResponseField name="return" type="bool">
+  True if there are other pages (either previous or next)
+</ResponseField>
+
+#### next_page_number()
+
+Returns the next page number.
+
+```python
+next_num = page.next_page_number()
+```
+
+<ResponseField name="return" type="int">
+  The next page number
+</ResponseField>
+
+**Raises:** `EmptyPage` if there is no next page
+
+#### previous_page_number()
+
+Returns the previous page number.
+
+```python
+prev_num = page.previous_page_number()
+```
+
+<ResponseField name="return" type="int">
+  The previous page number
+</ResponseField>
+
+**Raises:** `EmptyPage` if there is no previous page
+
+#### start_index()
+
+Returns the 1-based index of the first item on this page.
+
+```python
+start = page.start_index()  # e.g., 26 for page 2 with 25 items per page
+```
+
+<ResponseField name="return" type="int">
+  1-based index of the first item on this page
+</ResponseField>
+
+#### end_index()
+
+Returns the 1-based index of the last item on this page.
+
+```python
+end = page.end_index()  # e.g., 50 for page 2 with 25 items per page
+```
+
+<ResponseField name="return" type="int">
+  1-based index of the last item on this page
+</ResponseField>
+
+### Usage Example
+
+```python
+paginator = Paginator(Article.objects.all(), 25)
+page = paginator.page(2)
+
+print(f"Page {page.number} of {page.paginator.num_pages}")
+print(f"Showing items {page.start_index()}-{page.end_index()}")
+
+for article in page:
+    print(article.title)
+
+if page.has_previous():
+    print(f"Previous page: {page.previous_page_number()}")
+
+if page.has_next():
+    print(f"Next page: {page.next_page_number()}")
+```
+
+## AsyncPage
+
+Async version of Page for use with AsyncPaginator. Supports async iteration and has async versions of methods:
+
+- `await page.ahas_next()`
+- `await page.ahas_previous()`
+- `await page.ahas_other_pages()`
+- `await page.anext_page_number()`
+- `await page.aprevious_page_number()`
+- `await page.astart_index()`
+- `await page.aend_index()`
+- `await page.aget_object_list()`
+
+## Exceptions
+
+### InvalidPage
+
+Base exception class for pagination errors.
+
+```python
+from django.core.paginator import InvalidPage
+```
+
+### PageNotAnInteger
+
+Raised when `page()` is given a value that isn't an integer.
+
+```python
+from django.core.paginator import PageNotAnInteger
+
+try:
+    page = paginator.page('invalid')
+except PageNotAnInteger:
+    page = paginator.page(1)
+```
+
+### EmptyPage
+
+Raised when `page()` is given a valid value but no objects exist on that page.
+
+```python
+from django.core.paginator import EmptyPage
+
+try:
+    page = paginator.page(999)
+except EmptyPage:
+    page = paginator.page(paginator.num_pages)
+```
+
+## Template Usage
+
+In your view:
+```python
+def article_list(request):
+    articles = Article.objects.all()
+    paginator = Paginator(articles, 25)
+    
+    page_number = request.GET.get('page')
+    page = paginator.get_page(page_number)
+    
+    return render(request, 'articles.html', {'page': page})
+```
+
+In your template:
+```django
+{% for article in page %}
+    <h2>{{ article.title }}</h2>
+{% endfor %}
+
+<div class="pagination">
+    <span class="step-links">
+        {% if page.has_previous %}
+            <a href="?page=1">&laquo; first</a>
+            <a href="?page={{ page.previous_page_number }}">previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page.number }} of {{ page.paginator.num_pages }}.
+        </span>
+
+        {% if page.has_next %}
+            <a href="?page={{ page.next_page_number }}">next</a>
+            <a href="?page={{ page.paginator.num_pages }}">last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+```
+
+## See Also
+
+- [ListView](/api/views/generic#listview) - Generic view with built-in pagination
+- [QuerySets](/api/models/querysets) - Commonly paginated objects

@@ -1,0 +1,570 @@
+---
+title: 'Making Queries'
+description: 'Learn how to query the database using Django ORM - filter, exclude, get, create, update, and delete objects'
+---
+
+## Introduction
+
+Once you've created your models, Django provides a powerful QuerySet API for retrieving objects from the database. The QuerySet API is defined in `/django/db/models/query.py`.
+
+## Retrieving Objects
+
+### Get All Objects
+
+Retrieve all objects from a model:
+
+```python
+from myapp.models import Article
+
+# Get all articles
+articles = Article.objects.all()
+```
+
+<Note>
+QuerySets are lazy - they don't hit the database until you evaluate them (iterate, slice, call `list()`, etc.).
+</Note>
+
+### Filtering Objects
+
+Use `filter()` to retrieve objects matching certain criteria:
+
+```python
+# Get published articles
+published = Article.objects.filter(is_published=True)
+
+# Multiple conditions (AND)
+articles = Article.objects.filter(
+    is_published=True,
+    created_at__year=2024
+)
+
+# Chain filters (equivalent to above)
+articles = Article.objects.filter(
+    is_published=True
+).filter(
+    created_at__year=2024
+)
+```
+
+### Excluding Objects
+
+Use `exclude()` to filter out objects:
+
+```python
+# Get all articles except drafts
+articles = Article.objects.exclude(status='draft')
+
+# Combine filter and exclude
+articles = Article.objects.filter(
+    is_published=True
+).exclude(
+    category='archived'
+)
+```
+
+### Get a Single Object
+
+Use `get()` to retrieve a single object. From Django's source at `query.py:636`:
+
+```python
+def get(self, *args, **kwargs):
+    """
+    Perform the query and return a single object matching the given
+    keyword arguments.
+    """
+    clone = self.filter(*args, **kwargs)
+    num = len(clone)
+    if num == 1:
+        return clone._result_cache[0]
+    if not num:
+        raise self.model.DoesNotExist(
+            "%s matching query does not exist." % self.model._meta.object_name
+        )
+    raise self.model.MultipleObjectsReturned(
+        "get() returned more than one %s" % self.model._meta.object_name
+    )
+```
+
+Usage:
+
+```python
+# Get article by ID
+article = Article.objects.get(id=1)
+
+# Get by unique field
+article = Article.objects.get(slug='my-article')
+
+# Multiple conditions
+article = Article.objects.get(
+    title='Django Tutorial',
+    is_published=True
+)
+```
+
+<Warning>
+`get()` raises `DoesNotExist` if no object is found, and `MultipleObjectsReturned` if more than one object matches. Always handle these exceptions or use `filter().first()` for a safer alternative.
+</Warning>
+
+## Field Lookups
+
+Django provides powerful field lookups using double underscores:
+
+```python
+# Exact match (default)
+Article.objects.filter(title__exact='Django Tutorial')
+Article.objects.filter(title='Django Tutorial')  # Same as above
+
+# Case-insensitive exact match
+Article.objects.filter(title__iexact='django tutorial')
+
+# Contains
+Article.objects.filter(title__contains='Django')
+Article.objects.filter(title__icontains='django')  # Case-insensitive
+
+# Starts with / ends with
+Article.objects.filter(title__startswith='Django')
+Article.objects.filter(title__endswith='Tutorial')
+
+# Greater than / less than
+Article.objects.filter(view_count__gt=100)  # Greater than
+Article.objects.filter(view_count__gte=100)  # Greater than or equal
+Article.objects.filter(view_count__lt=1000)  # Less than
+Article.objects.filter(view_count__lte=1000)  # Less than or equal
+
+# Range
+Article.objects.filter(view_count__range=(100, 1000))
+
+# In a list
+Article.objects.filter(id__in=[1, 2, 3, 4])
+Article.objects.filter(status__in=['published', 'featured'])
+
+# NULL checks
+Article.objects.filter(published_date__isnull=True)
+Article.objects.filter(published_date__isnull=False)
+```
+
+### Date Lookups
+
+```python
+from datetime import date
+
+# Year, month, day
+Article.objects.filter(created_at__year=2024)
+Article.objects.filter(created_at__month=12)
+Article.objects.filter(created_at__day=25)
+
+# Date
+Article.objects.filter(created_at__date=date(2024, 12, 25))
+
+# Week day (1=Sunday, 7=Saturday)
+Article.objects.filter(created_at__week_day=1)
+
+# Quarter
+Article.objects.filter(created_at__quarter=4)
+
+# Time
+Article.objects.filter(created_at__hour=14)
+Article.objects.filter(created_at__minute=30)
+```
+
+## Complex Queries with Q Objects
+
+Use `Q` objects for complex queries with OR, NOT, and nested conditions:
+
+```python
+from django.db.models import Q
+
+# OR condition
+Article.objects.filter(
+    Q(is_published=True) | Q(is_featured=True)
+)
+
+# AND condition (explicitly)
+Article.objects.filter(
+    Q(is_published=True) & Q(category='tech')
+)
+
+# NOT condition
+Article.objects.filter(
+    ~Q(status='draft')
+)
+
+# Complex nested conditions
+Article.objects.filter(
+    Q(is_published=True) & (
+        Q(category='tech') | Q(category='science')
+    )
+)
+
+# Dynamic query building
+query = Q()
+if search_term:
+    query &= Q(title__icontains=search_term)
+if category:
+    query &= Q(category=category)
+if is_featured:
+    query &= Q(is_featured=True)
+
+articles = Article.objects.filter(query)
+```
+
+## Creating Objects
+
+### Method 1: Create and Save
+
+```python
+# Create instance
+article = Article(
+    title='My Article',
+    content='Article content here',
+    is_published=True
+)
+
+# Save to database
+article.save()
+```
+
+### Method 2: Using create()
+
+From Django's source at `query.py:674`:
+
+```python
+def create(self, **kwargs):
+    """
+    Create a new object with the given kwargs, saving it to the database
+    and returning the created object.
+    """
+    obj = self.model(**kwargs)
+    self._for_write = True
+    obj.save(force_insert=True, using=self.db)
+    return obj
+```
+
+Usage:
+
+```python
+# Create and save in one step
+article = Article.objects.create(
+    title='My Article',
+    content='Article content here',
+    is_published=True
+)
+```
+
+### Method 3: get_or_create()
+
+```python
+# Get existing or create new
+article, created = Article.objects.get_or_create(
+    slug='my-article',
+    defaults={
+        'title': 'My Article',
+        'content': 'Article content',
+        'is_published': True
+    }
+)
+
+if created:
+    print("Article was created")
+else:
+    print("Article already existed")
+```
+
+### Method 4: update_or_create()
+
+```python
+# Update existing or create new
+article, created = Article.objects.update_or_create(
+    slug='my-article',
+    defaults={
+        'title': 'Updated Title',
+        'content': 'Updated content',
+        'is_published': True
+    }
+)
+```
+
+### Bulk Create
+
+From Django's source at `query.py:771`:
+
+```python
+articles = [
+    Article(title=f'Article {i}', content=f'Content {i}')
+    for i in range(100)
+]
+
+# Bulk insert (much faster than creating one by one)
+Article.objects.bulk_create(articles, batch_size=1000)
+
+# With ignore_conflicts (PostgreSQL, SQLite 3.24+)
+Article.objects.bulk_create(
+    articles,
+    ignore_conflicts=True
+)
+
+# With update_conflicts (upsert)
+Article.objects.bulk_create(
+    articles,
+    update_conflicts=True,
+    update_fields=['content', 'is_published'],
+    unique_fields=['slug']
+)
+```
+
+<Tip>
+`bulk_create()` is much more efficient than creating objects in a loop. Use it when inserting multiple objects.
+</Tip>
+
+## Updating Objects
+
+### Update Single Object
+
+```python
+# Get object
+article = Article.objects.get(id=1)
+
+# Modify fields
+article.title = 'Updated Title'
+article.is_published = True
+
+# Save to database
+article.save()
+
+# Save only specific fields (more efficient)
+article.save(update_fields=['title', 'is_published'])
+```
+
+### Bulk Update
+
+```python
+# Update multiple objects
+Article.objects.filter(category='tech').update(
+    is_featured=True,
+    view_count=0
+)
+
+# Update with F expressions (database-level operations)
+from django.db.models import F
+
+Article.objects.filter(is_published=True).update(
+    view_count=F('view_count') + 1
+)
+```
+
+<Warning>
+`update()` bypasses model `save()` methods and doesn't send pre_save/post_save signals. Use it for bulk updates where you don't need model logic to run.
+</Warning>
+
+### Bulk Update with bulk_update()
+
+```python
+articles = Article.objects.filter(category='tech')
+
+for article in articles:
+    article.view_count += 10
+    article.is_featured = True
+
+# Update all at once
+Article.objects.bulk_update(
+    articles,
+    fields=['view_count', 'is_featured'],
+    batch_size=1000
+)
+```
+
+## Deleting Objects
+
+### Delete Single Object
+
+```python
+# Get and delete
+article = Article.objects.get(id=1)
+article.delete()
+```
+
+### Bulk Delete
+
+```python
+# Delete multiple objects
+Article.objects.filter(is_published=False).delete()
+
+# Delete all objects
+Article.objects.all().delete()
+```
+
+<Warning>
+Deletion is cascaded based on the `on_delete` option in ForeignKey relationships. Be careful when deleting objects that are referenced by other models.
+</Warning>
+
+## QuerySet Methods
+
+### Chaining and Filtering
+
+```python
+# QuerySets are lazy and chainable
+qs = Article.objects.all()  # No database hit yet
+qs = qs.filter(is_published=True)  # Still no database hit
+qs = qs.exclude(category='archived')  # Still no database hit
+qs = qs.order_by('-created_at')  # Still no database hit
+
+# Database is hit when you evaluate the QuerySet
+for article in qs:  # NOW the database is queried
+    print(article.title)
+```
+
+### Slicing
+
+```python
+# Get first 5 articles
+Article.objects.all()[:5]
+
+# Get articles 5-10
+Article.objects.all()[5:10]
+
+# Get first article (more efficient than [0])
+Article.objects.first()
+
+# Get last article
+Article.objects.last()
+```
+
+<Note>
+Negative indexing is not supported. Use `reverse()` or `order_by()` instead.
+</Note>
+
+### Ordering
+
+```python
+# Ascending order
+Article.objects.order_by('created_at')
+
+# Descending order
+Article.objects.order_by('-created_at')
+
+# Multiple fields
+Article.objects.order_by('-is_featured', '-created_at', 'title')
+
+# Random order
+Article.objects.order_by('?')
+
+# Clear ordering
+Article.objects.order_by().filter(is_published=True)
+```
+
+### Distinct
+
+```python
+# Remove duplicates
+Article.objects.values('category').distinct()
+
+# On PostgreSQL, you can specify fields
+Article.objects.distinct('category', 'author')
+```
+
+### Values and Values List
+
+```python
+# Returns dictionaries
+Article.objects.values('id', 'title', 'created_at')
+# [{'id': 1, 'title': 'Article 1', 'created_at': ...}, ...]
+
+# Returns tuples
+Article.objects.values_list('id', 'title')
+# [(1, 'Article 1'), (2, 'Article 2'), ...]
+
+# Flat list (single field)
+Article.objects.values_list('title', flat=True)
+# ['Article 1', 'Article 2', ...]
+
+# Named tuples
+Article.objects.values_list('id', 'title', named=True)
+```
+
+### Counting and Existence
+
+```python
+# Count objects
+count = Article.objects.filter(is_published=True).count()
+
+# Check existence (more efficient than count)
+if Article.objects.filter(slug='my-article').exists():
+    print("Article exists")
+
+# Get one or None
+article = Article.objects.filter(slug='my-article').first()
+```
+
+### Related Object Queries
+
+```python
+# Forward relationship (ForeignKey)
+book = Book.objects.get(id=1)
+author = book.author  # Follows the ForeignKey
+
+# Reverse relationship
+author = Author.objects.get(id=1)
+books = author.books.all()  # Uses related_name
+
+# Filter by related field
+Book.objects.filter(author__name='John Doe')
+
+# Span multiple relationships
+Book.objects.filter(author__country__name='USA')
+```
+
+## Select Related and Prefetch Related
+
+Optimize queries that access related objects:
+
+```python
+# select_related (for ForeignKey and OneToOne)
+# Uses SQL JOIN to fetch related objects in single query
+books = Book.objects.select_related('author').all()
+for book in books:
+    print(book.author.name)  # No additional query
+
+# Multiple relations
+books = Book.objects.select_related('author', 'publisher').all()
+
+# Nested relations
+books = Book.objects.select_related('author__country').all()
+
+# prefetch_related (for ManyToMany and reverse ForeignKey)
+# Uses separate queries and does joining in Python
+authors = Author.objects.prefetch_related('books').all()
+for author in authors:
+    for book in author.books.all():  # No additional query
+        print(book.title)
+
+# Combine both
+books = Book.objects.select_related('author').prefetch_related('tags').all()
+```
+
+<Tip>
+Use `select_related()` for single-valued relationships (ForeignKey, OneToOneField) and `prefetch_related()` for multi-valued relationships (ManyToManyField, reverse ForeignKey).
+</Tip>
+
+## Raw SQL
+
+When you need to execute raw SQL:
+
+```python
+# Raw query
+articles = Article.objects.raw(
+    'SELECT * FROM articles WHERE is_published = %s',
+    [True]
+)
+
+# Execute custom SQL
+from django.db import connection
+
+with connection.cursor() as cursor:
+    cursor.execute("UPDATE articles SET view_count = view_count + 1 WHERE id = %s", [1])
+    cursor.execute("SELECT * FROM articles WHERE view_count > %s", [100])
+    rows = cursor.fetchall()
+```
+
+<Warning>
+Always use parameter substitution (the `%s` placeholder) to prevent SQL injection attacks. Never use string formatting or concatenation with user input.
+</Warning>
