@@ -376,3 +376,95 @@ python manage.py test
 python manage.py test myapp
 python manage.py test myapp.tests.MyTestCase
 ```
+
+### compilemessages
+
+Compiles .po files to .mo files for use with gettext.
+
+```bash
+python manage.py compilemessages
+python manage.py compilemessages --locale=pt_BR
+```
+
+### makemessages
+
+Runs over the entire source tree and pulls out all strings marked for translation. It creates (or updates) message files in the locale directory.
+
+```bash
+python manage.py makemessages -l pt_BR
+python manage.py makemessages --all
+```
+
+### createcachetable
+
+Creates the database tables needed for the database cache backend.
+
+```bash
+python manage.py createcachetable
+```
+
+### diffsettings
+
+Displays differences between the current settings and Django's default settings.
+
+```bash
+python manage.py diffsettings
+python manage.py diffsettings --all
+```
+
+### inspectdb
+
+Introspects the database tables and outputs a Django model module to standard output.
+
+```bash
+python manage.py inspectdb
+python manage.py inspectdb table_name
+```
+
+### sqlflush
+
+Returns SQL statements that would be executed for the flush command.
+
+```bash
+python manage.py sqlflush
+```
+
+### sqlsequencereset
+
+Prints the SQL statements for resetting sequences for the given app names.
+
+```bash
+python manage.py sqlsequencereset myapp
+```
+
+### squashmigrations
+
+Squashes a range of migrations for an app into a single migration.
+
+```bash
+python manage.py squashmigrations myapp 0001 0004
+```
+
+### testserver
+
+Runs the development server with data from given fixture files.
+
+```bash
+python manage.py testserver fixture1.json fixture2.json
+```
+
+### sendtestemail
+
+Sends a test email to confirm email settings are configured correctly.
+
+```bash
+python manage.py sendtestemail recipient@example.com
+```
+
+### optimizemigration
+
+Optimizes a migration by removing redundant operations.
+
+```bash
+python manage.py optimizemigration myapp 0002
+```

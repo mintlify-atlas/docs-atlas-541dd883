@@ -704,3 +704,180 @@ if not obj.exists():
 if not request.user.has_perm('app.view_object'):
     return HttpResponseForbidden('Permission denied')
 ```
+
+---
+
+## Shortcuts
+
+Django provides several shortcut functions in `django.shortcuts` to simplify common patterns.
+
+### render()
+
+Combines template loading and rendering with an HttpResponse.
+
+```python
+from django.shortcuts import render
+
+def my_view(request):
+    context = {'name': 'World'}
+    return render(request, 'template.html', context)
+```
+
+**Signature:**
+```python
+render(request, template_name, context=None, content_type=None, status=None, using=None)
+```
+
+<ParamField name="request" type="HttpRequest" required>
+  The request object
+</ParamField>
+
+<ParamField name="template_name" type="str" required>
+  Path to the template
+</ParamField>
+
+<ParamField name="context" type="dict" optional>
+  Context dictionary for the template
+</ParamField>
+
+<ParamField name="content_type" type="str" optional>
+  MIME type for the response (defaults to `text/html`)
+</ParamField>
+
+<ParamField name="status" type="int" optional>
+  HTTP status code (defaults to 200)
+</ParamField>
+
+<ParamField name="using" type="str" optional>
+  Name of template engine to use
+</ParamField>
+
+---
+
+### redirect()
+
+Returns an HttpResponseRedirect to the given URL or view.
+
+```python
+from django.shortcuts import redirect
+
+# Redirect to URL
+return redirect('/users/')
+
+# Redirect to named URL pattern
+return redirect('user-detail', user_id=123)
+
+# Redirect to model with get_absolute_url()
+return redirect(user_object)
+
+# Permanent redirect
+return redirect('/new-url/', permanent=True)
+```
+
+**Signature:**
+```python
+redirect(to, *args, permanent=False, preserve_request=False, **kwargs)
+```
+
+<ParamField name="to" type="str | Model" required>
+  URL, view name, or model instance with `get_absolute_url()`
+</ParamField>
+
+<ParamField name="permanent" type="bool" default="False">
+  If `True`, returns 301 instead of 302
+</ParamField>
+
+<ParamField name="preserve_request" type="bool" default="False">
+  If `True`, preserves the original request method and body (Django 5.0+)
+</ParamField>
+
+---
+
+### get_object_or_404()
+
+Retrieves an object or raises Http404 if not found.
+
+```python
+from django.shortcuts import get_object_or_404
+from myapp.models import Article
+
+def article_detail(request, pk):
+    article = get_object_or_404(Article, pk=pk)
+    return render(request, 'article.html', {'article': article})
+    
+# With related lookups
+article = get_object_or_404(Article, pk=pk, status='published')
+```
+
+**Signature:**
+```python
+get_object_or_404(klass, *args, **kwargs)
+```
+
+<ParamField name="klass" type="Model | Manager | QuerySet" required>
+  Model class, Manager, or QuerySet to query
+</ParamField>
+
+<ParamField name="**kwargs" type="dict">
+  Lookup parameters (e.g., `pk=1`, `slug='my-slug'`)
+</ParamField>
+
+---
+
+### get_list_or_404()
+
+Retrieves a filtered list or raises Http404 if the list is empty.
+
+```python
+from django.shortcuts import get_list_or_404
+from myapp.models import Article
+
+def published_articles(request):
+    articles = get_list_or_404(Article, status='published')
+    return render(request, 'articles.html', {'articles': articles})
+```
+
+**Signature:**
+```python
+get_list_or_404(klass, *args, **kwargs)
+```
+
+<ParamField name="klass" type="Model | Manager | QuerySet" required>
+  Model class, Manager, or QuerySet to query
+</ParamField>
+
+<ParamField name="**kwargs" type="dict">
+  Filter parameters
+</ParamField>
+
+Returns a list (not a QuerySet).
+
+---
+
+### resolve_url()
+
+Returns a URL for a given object, view name, or URL pattern.
+
+```python
+from django.shortcuts import resolve_url
+
+# Resolve view name
+url = resolve_url('article-detail', pk=123)
+
+# Resolve model with get_absolute_url()
+url = resolve_url(article_object)
+
+# Pass through URLs
+url = resolve_url('/articles/')
+```
+
+**Signature:**
+```python
+resolve_url(to, *args, **kwargs)
+```
+
+<ParamField name="to" type="str | Model" required>
+  URL, view name, or model instance
+</ParamField>
+
+Returns the resolved URL as a string.
